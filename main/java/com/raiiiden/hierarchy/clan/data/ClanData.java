@@ -22,13 +22,17 @@ import java.util.UUID;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.scores.PlayerTeam;
+import net.minecraft.world.scores.Scoreboard;
 
 public class ClanData extends SavedData {
   private static final String DATA_NAME = "hierarchy_clans";
   private static final long COMBAT_SNAPSHOT_TTL_MILLIS = 15L * 1000L;
+  private MinecraftServer server;
 
   private final Map<UUID, Clan> clans = new LinkedHashMap<>();
   private final Map<UUID, UUID> playerClans = new HashMap<>();
@@ -46,7 +50,22 @@ public class ClanData extends SavedData {
   private final Set<String> pendingFriendlyFireRequests = new java.util.LinkedHashSet<>();
 
   public static ClanData get(MinecraftServer server) {
-    return server.getLevel(Level.OVERWORLD).getDataStorage().computeIfAbsent(ClanData::load, ClanData::new, DATA_NAME);
+    ClanData data = server.getLevel(Level.OVERWORLD)
+            .getDataStorage()
+            .computeIfAbsent(ClanData::load, ClanData::new, DATA_NAME);
+    data.server = server;
+    return data;
+  }
+  private PlayerTeam getOrCreateTeam(Clan clan) {
+    if (server == null) return null;
+    Scoreboard scoreboard = server.getScoreboard();
+    String teamName = "clan_" + clan.getId().toString().replace("-", "").substring(0, 16);
+    PlayerTeam team = scoreboard.getPlayerTeam(teamName);
+    if (team == null) {
+      team = scoreboard.addPlayerTeam(teamName);
+      team.setDisplayName(Component.literal(clan.getName()));
+    }
+    return team;
   }
 
   public static ClanData load(CompoundTag tag) {
@@ -185,6 +204,12 @@ public class ClanData extends SavedData {
     clans.put(clan.getId(), clan);
     clanNameIndex.put(normalize(name), clan.getId().toString());
     playerClans.put(leader, clan.getId());
+    // Sync
+    PlayerTeam team = getOrCreateTeam(clan);
+    if (team != null && server != null) {
+      String leaderName = playerName(leader);
+      server.getScoreboard().addPlayerToTeam(leaderName, team);
+    }
     setDirty();
     return clan;
   }
@@ -209,6 +234,13 @@ public class ClanData extends SavedData {
     clans.remove(clan.getId());
     clanNameIndex.remove(normalize(clan.getName()));
     pendingInvites.values().removeIf(clan.getId()::equals);
+    if (server != null) {
+      String teamName = "clan_" + clan.getId().toString().replace("-", "").substring(0, 16);
+      PlayerTeam team = server.getScoreboard().getPlayerTeam(teamName);
+      if (team != null) {
+        server.getScoreboard().removePlayerTeam(team);
+      }
+    }
     setDirty();
   }
 
@@ -217,6 +249,11 @@ public class ClanData extends SavedData {
     playerClans.put(playerId, clan.getId());
     pendingInvites.remove(playerId);
     clearCombatSnapshots(playerId);
+    // Sync
+    PlayerTeam team = getOrCreateTeam(clan);
+    if (team != null && server != null) {
+      server.getScoreboard().addPlayerToTeam(playerName(playerId), team);
+    }
     setDirty();
   }
 
@@ -225,6 +262,9 @@ public class ClanData extends SavedData {
     clan.getCoLeaders().remove(playerId);
     playerClans.remove(playerId);
     clearCombatSnapshots(playerId);
+    if (server != null) {
+      server.getScoreboard().removePlayerFromTeam(playerName(playerId));
+    }
     setDirty();
   }
 
@@ -562,5 +602,15 @@ public class ClanData extends SavedData {
       tag.add(StringTag.valueOf(value));
     }
     return tag;
+  }
+  public void resyncTeams() {
+    if (server == null) return;
+    for (Clan clan : clans.values()) {
+      PlayerTeam team = getOrCreateTeam(clan);
+      if (team == null) continue;
+      for (UUID memberId : clan.getMembers()) {
+        server.getScoreboard().addPlayerToTeam(playerName(memberId), team);
+      }
+    }
   }
 }
