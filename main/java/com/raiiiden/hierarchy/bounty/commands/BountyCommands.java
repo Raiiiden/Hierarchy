@@ -38,6 +38,9 @@ public final class BountyCommands {
             .requires(source -> source.getEntity() instanceof ServerPlayer)
             .then(Commands.argument("target", EntityArgument.player())
                 .then(Commands.argument("amount", LongArgumentType.longArg(1L)).executes(ctx -> contribute(ctx.getSource(), player(ctx.getSource()), EntityArgument.getPlayer(ctx, "target"), LongArgumentType.getLong(ctx, "amount"))))))
+        .then(Commands.literal("cancel")
+            .requires(source -> source.getEntity() instanceof ServerPlayer)
+            .then(Commands.argument("target", EntityArgument.player()).executes(ctx -> cancel(ctx.getSource(), player(ctx.getSource()), EntityArgument.getPlayer(ctx, "target")))))
         .then(Commands.literal("redeem")
             .requires(source -> source.getEntity() instanceof ServerPlayer)
             .executes(ctx -> redeem(ctx.getSource(), player(ctx.getSource())))));
@@ -46,7 +49,7 @@ public final class BountyCommands {
   private static int place(CommandSourceStack source, ServerPlayer placer, ServerPlayer target, long amount) {
     long now = System.currentTimeMillis();
     BountyData data = BountyData.get(source.getServer());
-    data.expireIfNeeded(target.getUUID(), now);
+    data.expireIfNeeded(target.getUUID(), now, source.getServer());
     if (amount < BountyConfig.MIN_BOUNTY_AMOUNT.get()) {
       return fail(source, "Invalid bounty amount.");
     }
@@ -68,14 +71,15 @@ public final class BountyCommands {
     if (!payBountyCost(placer, amount, BountyConfig.PLACE_CURRENCY_COST.get(), BountyConfig.PLACE_XP_COST.get())) {
       return fail(source, "You do not have enough currency.");
     }
-    data.place(target.getUUID(), target.getGameProfile().getName(), placer.getUUID(), amount, now);
+    data.place(source.getServer(), target.getUUID(), target.getGameProfile().getName(), placer.getUUID(), amount, now);
+    target.sendSystemMessage(Component.literal("A bounty has been placed on you for " + amount + "."));
     return ok(source, "Bounty placed on " + target.getGameProfile().getName() + " for " + amount + ".");
   }
 
   private static int contribute(CommandSourceStack source, ServerPlayer contributor, ServerPlayer target, long amount) {
     long now = System.currentTimeMillis();
     BountyData data = BountyData.get(source.getServer());
-    data.expireIfNeeded(target.getUUID(), now);
+    data.expireIfNeeded(target.getUUID(), now, source.getServer());
     Bounty bounty = data.bounty(target.getUUID()).orElse(null);
     if (bounty == null) {
       return fail(source, "That target does not have an active bounty.");
@@ -93,6 +97,28 @@ public final class BountyCommands {
     return ok(source, "Added " + amount + " to " + bounty.targetName() + "'s bounty.");
   }
 
+  private static int cancel(CommandSourceStack source, ServerPlayer placer, ServerPlayer target) {
+    long now = System.currentTimeMillis();
+    BountyData data = BountyData.get(source.getServer());
+    data.expireIfNeeded(target.getUUID(), now, source.getServer());
+    Bounty bounty = data.bounty(target.getUUID()).orElse(null);
+    if (bounty == null) {
+      return fail(source, "That target does not have an active bounty.");
+    }
+    Long contribution = bounty.contributions().get(placer.getUUID());
+    if (contribution == null || contribution <= 0L) {
+      return fail(source, "You do not have a bounty contribution on that target.");
+    }
+    long refund = Math.max(0L, contribution - BountyLogic.taxFor(contribution));
+    if (refund > 0L && !CurrencyManager.depositPlayer(placer, refund)) {
+      return fail(source, "Unable to refund bounty.");
+    }
+    if (!data.cancelContribution(target.getUUID(), placer.getUUID(), now, source.getServer())) {
+      return fail(source, "Unable to cancel bounty.");
+    }
+    return ok(source, "Cancelled your bounty contribution on " + bounty.targetName() + " and refunded " + refund + ".");
+  }
+
   private static int redeem(CommandSourceStack source, ServerPlayer killer) {
     ItemStack tag = BountyEvents.findDogTag(killer);
     if (tag.isEmpty()) {
@@ -101,7 +127,7 @@ public final class BountyCommands {
     UUID targetId = tag.getOrCreateTag().getUUID("BountyTarget");
     long now = System.currentTimeMillis();
     BountyData data = BountyData.get(source.getServer());
-    data.expireIfNeeded(targetId, now);
+    data.expireIfNeeded(targetId, now, source.getServer());
     Bounty bounty = data.bounty(targetId).orElse(null);
     if (bounty == null) {
       return fail(source, "That bounty is no longer active.");
@@ -114,17 +140,20 @@ public final class BountyCommands {
     }
     tag.shrink(1);
     if (HumanityConfig.ENABLE_HUMANITY.get()) {
-      HumanityData.get(source.getServer()).add(killer.getUUID(), HumanityConfig.BOUNTY_CLAIM_HUMANITY_GAIN.get());
+      HumanityData.get(source.getServer()).add(
+              killer.getUUID(),
+              HumanityConfig.BOUNTY_CLAIM_HUMANITY_GAIN.get()  // already double now
+      );
       NameplateUtil.refresh(killer);
     }
-    data.clearAndCooldown(targetId, now);
+    data.clearAndCooldown(targetId, now, source.getServer());
     return ok(source, "Redeemed bounty for " + bounty.amount() + ".");
   }
 
   private static int info(CommandSourceStack source, ServerPlayer target) {
     long now = System.currentTimeMillis();
     BountyData data = BountyData.get(source.getServer());
-    data.expireIfNeeded(target.getUUID(), now);
+    data.expireIfNeeded(target.getUUID(), now, source.getServer());
     Bounty bounty = data.bounty(target.getUUID()).orElse(null);
     if (bounty == null) {
       return fail(source, "That target does not have an active bounty.");
@@ -135,7 +164,7 @@ public final class BountyCommands {
 
   private static int list(CommandSourceStack source) {
     BountyData data = BountyData.get(source.getServer());
-    data.expireAll(System.currentTimeMillis());
+    data.expireAll(System.currentTimeMillis(), source.getServer());
     String bounties = data.activeBounties().stream()
         .sorted(Comparator.comparing(Bounty::targetName, String.CASE_INSENSITIVE_ORDER))
         .map(bounty -> bounty.targetName() + " (" + bounty.amount() + ")")

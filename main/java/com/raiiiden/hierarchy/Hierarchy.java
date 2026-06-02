@@ -1,5 +1,6 @@
 package com.raiiiden.hierarchy;
 
+import com.raiiiden.hierarchy.admin.commands.AdminCommands;
 import com.raiiiden.hierarchy.bounty.commands.BountyCommands;
 import com.raiiiden.hierarchy.bounty.config.BountyConfig;
 import com.raiiiden.hierarchy.bounty.events.BountyEvents;
@@ -35,5 +36,6 @@ public class Hierarchy {
   private void registerCommands(RegisterCommandsEvent event) {
     ClanCommands.register(event.getDispatcher());
     BountyCommands.register(event.getDispatcher());
+    AdminCommands.register(event.getDispatcher());
   }
 }

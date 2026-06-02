@@ -613,4 +613,17 @@ public class ClanData extends SavedData {
       }
     }
   }
+  public void clearAllPvpDelays() {
+    pvpDelayUntil.clear();
+    playerClanPvpDelayUntil.clear();
+    combatSnapshots.clear();
+    lastPvpDamageValidity.clear();
+    setDirty();
+  }
+  public void clearPlayerPvpDelays(UUID playerId) {
+    String id = playerId.toString();
+    playerClanPvpDelayUntil.keySet().removeIf(key -> key.startsWith(id));
+    clearCombatSnapshots(playerId);
+    setDirty();
+  }
 }

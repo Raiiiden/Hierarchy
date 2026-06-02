@@ -41,6 +41,10 @@ public class Bounty {
     return amount;
   }
 
+  public void amount(long amount) {
+    this.amount = amount;
+  }
+
   public long expiresAt() {
     return expiresAt;
   }

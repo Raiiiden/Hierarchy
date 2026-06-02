@@ -108,4 +108,18 @@ public class ClanEvents {
     }
     return true;
   }
+  @SubscribeEvent
+  public void onPlayerRespawn(PlayerEvent.PlayerRespawnEvent event) {
+    if (!(event.getEntity() instanceof ServerPlayer player)) {
+      return;
+    }
+    NameplateUtil.refresh(player);
+  }
+  @SubscribeEvent
+  public void onPlayerChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
+    if (!(event.getEntity() instanceof ServerPlayer player)) {
+      return;
+    }
+    NameplateUtil.refresh(player);
+  }
 }

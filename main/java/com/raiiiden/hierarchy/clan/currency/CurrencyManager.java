@@ -7,6 +7,7 @@ import net.minecraft.server.level.ServerPlayer;
 public final class CurrencyManager {
   private static CurrencyProvider activeProvider;
   private static final CurrencyProvider XP_PROVIDER = new XpCurrencyProvider();
+  private static final CurrencyProvider ITEM_PROVIDER = new ItemCurrencyProvider();
   private static final ClanCurrencyProvider CLAN_BANK_PROVIDER = new ClanBankCurrencyProvider();
 
   private CurrencyManager() {
@@ -19,6 +20,10 @@ public final class CurrencyManager {
   public static CurrencyProvider playerProvider() {
     if (activeProvider != null) {
       return activeProvider;
+    }
+    String type = ClanCombatConfig.PLAYER_CURRENCY_TYPE.get().trim().toLowerCase();
+    if ("item".equals(type)) {
+      return ITEM_PROVIDER;
     }
     return ClanCombatConfig.ALLOW_XP_CURRENCY_FALLBACK.get() ? XP_PROVIDER : null;
   }

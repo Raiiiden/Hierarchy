@@ -2,6 +2,7 @@ package com.raiiiden.hierarchy.bounty.data;
 
 import com.raiiiden.hierarchy.bounty.config.BountyConfig;
 import com.raiiiden.hierarchy.bounty.model.Bounty;
+import com.raiiiden.hierarchy.nameplate.NameplateUtil;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -12,6 +13,7 @@ import java.util.UUID;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.saveddata.SavedData;
 
@@ -93,6 +95,12 @@ public class BountyData extends SavedData {
     return bounty;
   }
 
+  public Bounty place(MinecraftServer server, UUID targetId, String targetName, UUID contributorId, long amount, long now) {
+    Bounty bounty = place(targetId, targetName, contributorId, amount, now);
+    refreshTargetNameplate(server, targetId);
+    return bounty;
+  }
+
   public void contribute(Bounty bounty, UUID contributorId, long amount) {
     bounty.contribute(contributorId, amount);
     setDirty();
@@ -104,6 +112,11 @@ public class BountyData extends SavedData {
     setDirty();
   }
 
+  public void clearAndCooldown(UUID targetId, long now, MinecraftServer server) {
+    clearAndCooldown(targetId, now);
+    refreshTargetNameplate(server, targetId);
+  }
+
   public void expireIfNeeded(UUID targetId, long now) {
     Bounty bounty = activeByTarget.get(targetId);
     if (bounty != null && bounty.pausedAt() <= 0L && bounty.expiresAt() <= now) {
@@ -111,9 +124,22 @@ public class BountyData extends SavedData {
     }
   }
 
+  public void expireIfNeeded(UUID targetId, long now, MinecraftServer server) {
+    Bounty bounty = activeByTarget.get(targetId);
+    if (bounty != null && bounty.pausedAt() <= 0L && bounty.expiresAt() <= now) {
+      clearAndCooldown(targetId, now, server);
+    }
+  }
+
   public void expireAll(long now) {
     for (UUID targetId : activeByTarget.keySet().toArray(UUID[]::new)) {
       expireIfNeeded(targetId, now);
+    }
+  }
+
+  public void expireAll(long now, MinecraftServer server) {
+    for (UUID targetId : activeByTarget.keySet().toArray(UUID[]::new)) {
+      expireIfNeeded(targetId, now, server);
     }
   }
 
@@ -154,6 +180,35 @@ public class BountyData extends SavedData {
         bounty.pausedAt(0L);
       }
       setDirty();
+    }
+  }
+
+  public boolean cancelContribution(UUID targetId, UUID contributorId, long now, MinecraftServer server) {
+    Bounty bounty = activeByTarget.get(targetId);
+    if (bounty == null) {
+      return false;
+    }
+    Long contribution = bounty.contributions().remove(contributorId);
+    if (contribution == null || contribution <= 0L) {
+      return false;
+    }
+    long remaining = Math.max(0L, bounty.amount() - contribution);
+    if (remaining <= 0L) {
+      clearAndCooldown(targetId, now, server);
+    } else {
+      bounty.amount(remaining);
+      setDirty();
+    }
+    return true;
+  }
+
+  private void refreshTargetNameplate(MinecraftServer server, UUID targetId) {
+    if (server == null) {
+      return;
+    }
+    ServerPlayer target = server.getPlayerList().getPlayer(targetId);
+    if (target != null) {
+      NameplateUtil.refresh(target);
     }
   }
 

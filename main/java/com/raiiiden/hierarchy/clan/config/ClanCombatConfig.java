@@ -23,6 +23,8 @@ public final class ClanCombatConfig {
   public static final ForgeConfigSpec.IntValue MAX_TRANSACTION_ENTRIES;
   public static final ForgeConfigSpec.BooleanValue ENABLE_BANK_AUDIT_LOGGING;
   public static final ForgeConfigSpec.BooleanValue ALLOW_XP_CURRENCY_FALLBACK;
+  public static final ForgeConfigSpec.ConfigValue<String> PLAYER_CURRENCY_TYPE;
+  public static final ForgeConfigSpec.ConfigValue<String> PLAYER_CURRENCY_ITEM;
   public static final ForgeConfigSpec.BooleanValue ENABLE_XP_COSTS;
   public static final ForgeConfigSpec.BooleanValue USE_CLAN_BANK_FOR_ROE_COSTS;
   public static final ForgeConfigSpec.BooleanValue BANK_LEADER_VIEW;
@@ -95,15 +97,23 @@ public final class ClanCombatConfig {
     ENABLE_BANK_AUDIT_LOGGING = builder
         .comment("Log successful clan bank deposits and withdrawals to the server log.")
         .define("enableAuditLogging", false);
-    ALLOW_XP_CURRENCY_FALLBACK = builder
-        .comment("Use XP levels as currency if no external CurrencyProvider is registered.")
-        .define("allowXpCurrencyFallback", true);
     ENABLE_XP_COSTS = builder
         .comment("Enable XP level costs for configured ROE actions.")
         .define("enableXpCosts", true);
     USE_CLAN_BANK_FOR_ROE_COSTS = builder
         .comment("Use clan bank for ROE action currency costs when a clan already exists; otherwise use player currency.")
         .define("useClanBankForRoeCosts", false);
+    builder.pop();
+    builder.push("currency");
+    ALLOW_XP_CURRENCY_FALLBACK = builder
+        .comment("Use XP levels as currency if no external CurrencyProvider is registered and playerCurrencyType is xp.")
+        .define("allowXpCurrencyFallback", true);
+    PLAYER_CURRENCY_TYPE = builder
+        .comment("Built-in player currency used when no external CurrencyProvider is registered. Valid values: xp, item.")
+        .define("playerCurrencyType", "xp");
+    PLAYER_CURRENCY_ITEM = builder
+        .comment("Item used when playerCurrencyType is item. Example: minecraft:iron_ingot.")
+        .define("playerCurrencyItem", "minecraft:iron_ingot");
     builder.pop();
     builder.push("clanBankRolePermissions");
     BANK_LEADER_VIEW = builder.define("leaderView", true);

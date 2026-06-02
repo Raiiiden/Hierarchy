@@ -50,18 +50,21 @@ public class BountyEvents {
 
   @SubscribeEvent
   public void onLivingAttack(LivingAttackEvent event) {
-    if (!(event.getEntity() instanceof Player victim)) {
-      return;
-    }
+    if (!(event.getEntity() instanceof Player victim)) return;
     Entity source = event.getSource().getEntity();
-    if (!(source instanceof ServerPlayer attacker) || attacker.getUUID().equals(victim.getUUID())) {
-      return;
-    }
+    if (!(source instanceof ServerPlayer attacker)
+            || attacker.getUUID().equals(victim.getUUID())) return;
+
     ClanData clans = ClanData.get(attacker.server);
-    if (!clans.isLastPvpDamageValid(attacker.getUUID(), victim.getUUID())) {
-      return;
-    }
-    HumanityCombatData.get(attacker.server).recordFirstAttack(ClanPair.key(attacker.getUUID(), victim.getUUID()), attacker.getUUID(), System.currentTimeMillis(), selfDefenseWindowMillis());
+    if (!clans.isLastPvpDamageValid(attacker.getUUID(), victim.getUUID())) return;
+
+    // Record attacker -> victim direction only
+    HumanityCombatData.get(attacker.server).recordAttack(
+            attacker.getUUID(),
+            victim.getUUID(),
+            System.currentTimeMillis(),
+            selfDefenseWindowMillis()
+    );
   }
 
   @SubscribeEvent
@@ -83,73 +86,64 @@ public class BountyEvents {
     BountyData bountyData = BountyData.get(target.server);
     bountyData.recordPlayerKill(killer.getUUID(), now);
     adjustHumanityForKill(killer, target, now);
-    bountyData.expireIfNeeded(target.getUUID(), now);
+    bountyData.expireIfNeeded(target.getUUID(), now, target.server);
     Bounty bounty = bountyData.bounty(target.getUUID()).orElse(null);
-    if (bounty != null && BountyConfig.ENABLE_DOG_TAGS.get() && BountyLogic.relationshipAllowsDogTag(target.server, killer.getUUID(), target.getUUID())) {
+    if (bounty != null && BountyConfig.ENABLE_DOG_TAGS.get() && BountyLogic.relationshipAllowsDogTag(target.server, killer.getUUID(), target.getUUID()) && findDogTag(killer).isEmpty()) {
       target.level().addFreshEntity(new ItemEntity(target.level(), target.getX(), target.getY(), target.getZ(), createDogTag(bounty, killer.getUUID())));
     }
   }
 
   private void adjustHumanityForKill(ServerPlayer killer, ServerPlayer target, long now) {
-    if (!HumanityConfig.ENABLE_HUMANITY.get()) {
-      return;
-    }
-    if (!BountyLogic.relationshipAllowsDogTag(killer.server, killer.getUUID(), target.getUUID())) {
-      return;
-    }
-    String pair = ClanPair.key(killer.getUUID(), target.getUUID());
+    if (!HumanityConfig.ENABLE_HUMANITY.get()) return;
+    if (!BountyLogic.relationshipAllowsDogTag(
+            killer.server, killer.getUUID(), target.getUUID())) return;
+
     HumanityCombatData combatData = HumanityCombatData.get(killer.server);
-    long selfDefenseWindowMillis = selfDefenseWindowMillis();
-    boolean killerAttackedFirst = combatData.attackedFirst(pair, killer.getUUID(), now, selfDefenseWindowMillis);
-    boolean targetAttackedFirst = combatData.attackedFirst(pair, target.getUUID(), now, selfDefenseWindowMillis);
-    int loss = playerKillLossFor(target, killerAttackedFirst, targetAttackedFirst);
-    if (loss > 0) {
+    long window = selfDefenseWindowMillis();
+
+    boolean killerAttackedFirst = combatData.attackedFirst(
+            killer.getUUID(), target.getUUID(), now, window);
+    boolean targetAttackedFirst = combatData.attackedFirst(
+            target.getUUID(), killer.getUUID(), now, window);
+
+    double loss = playerKillLossFor(target, killerAttackedFirst, targetAttackedFirst);
+    if (loss > 0.0) {
       HumanityData.get(killer.server).add(killer.getUUID(), -loss);
       NameplateUtil.refresh(killer);
     }
+
+    combatData.clearPair(killer.getUUID(), target.getUUID());
   }
 
   private void adjustHumanityForMobKill(LivingEntity target, Entity source) {
-    if (!HumanityConfig.ENABLE_HUMANITY.get() || !(source instanceof ServerPlayer killer)) {
-      return;
-    }
-    int gain = mobKillHumanityGain(target);
-    if (gain <= 0) {
-      return;
-    }
+    if (!HumanityConfig.ENABLE_HUMANITY.get() || !(source instanceof ServerPlayer killer)) return;
+    double gain = mobKillHumanityGain(target);
+    if (gain <= 0.0) return;
     HumanityData.get(killer.server).add(killer.getUUID(), gain);
     NameplateUtil.refresh(killer);
   }
 
-  private int mobKillHumanityGain(LivingEntity target) {
+  private double mobKillHumanityGain(LivingEntity target) {
     ResourceLocation entityId = ForgeRegistries.ENTITY_TYPES.getKey(target.getType());
-    if (entityId == null) {
-      return 0;
-    }
+    if (entityId == null) return 0.0;
     String entityIdString = entityId.toString();
     for (String entry : HumanityConfig.MOB_KILL_HUMANITY_GAINS.get()) {
       int separator = entry.lastIndexOf('=');
-      if (separator <= 0 || separator >= entry.length() - 1) {
-        continue;
-      }
+      if (separator <= 0 || separator >= entry.length() - 1) continue;
       String configuredEntityId = entry.substring(0, separator).trim();
-      if (!configuredEntityId.equals(entityIdString)) {
-        continue;
-      }
+      if (!configuredEntityId.equals(entityIdString)) continue;
       try {
-        return Integer.parseInt(entry.substring(separator + 1).trim());
+        return Double.parseDouble(entry.substring(separator + 1).trim());
       } catch (NumberFormatException ignored) {
-        return 0;
+        return 0.0;
       }
     }
-    return 0;
+    return 0.0;
   }
 
-  private int playerKillLossFor(ServerPlayer target, boolean killerAttackedFirst, boolean targetAttackedFirst) {
-    if (!killerAttackedFirst && !targetAttackedFirst) {
-      return 0;
-    }
-    HumanityStanding standing = standingFor(HumanityData.get(target.server).humanity(target.getUUID()));
+  private double playerKillLossFor(ServerPlayer target, boolean killerAttackedFirst, boolean targetAttackedFirst) {
+    if (!killerAttackedFirst && !targetAttackedFirst) return 0.0;
+    HumanityStanding standing = standingFor(HumanityData.get(target.server).humanityDisplay(target.getUUID()));
     if (targetAttackedFirst) {
       return switch (standing) {
         case LOW -> HumanityConfig.PLAYER_KILL_LOW_STANDING_LOSS_SELF_DEFENSE.get();
@@ -165,10 +159,10 @@ public class BountyEvents {
   }
 
   private HumanityStanding standingFor(int humanity) {
-    if (humanity <= HumanityConfig.LOW_HUMANITY_BOUNTY_THRESHOLD.get()) {
+    if (humanity <= HumanityConfig.LOW_HUMANITY_BOUNTY_THRESHOLD.get().intValue()) {
       return HumanityStanding.LOW;
     }
-    if (humanity >= HumanityConfig.HIGH_HUMANITY_PROTECTED_THRESHOLD.get()) {
+    if (humanity >= HumanityConfig.HIGH_HUMANITY_PROTECTED_THRESHOLD.get().intValue()) {
       return HumanityStanding.HIGH;
     }
     return HumanityStanding.NEUTRAL;
@@ -192,6 +186,10 @@ public class BountyEvents {
       if (!stack.isEmpty() && stack.hasTag() && stack.getOrCreateTag().hasUUID("BountyTarget")) {
         return stack;
       }
+    }
+    ItemStack offhand = player.getOffhandItem();
+    if (!offhand.isEmpty() && offhand.hasTag() && offhand.getOrCreateTag().hasUUID("BountyTarget")) {
+      return offhand;
     }
     return ItemStack.EMPTY;
   }

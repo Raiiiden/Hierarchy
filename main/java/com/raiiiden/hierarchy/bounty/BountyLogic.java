@@ -34,17 +34,27 @@ public final class BountyLogic {
   public static boolean isEligibleTarget(MinecraftServer server, UUID targetId, long now) {
     BountyData bountyData = BountyData.get(server);
     HumanityData humanityData = HumanityData.get(server);
-    int humanity = humanityData.humanity(targetId);
-    if (HumanityConfig.ENABLE_HUMANITY.get() && humanity >= HumanityConfig.HIGH_HUMANITY_PROTECTED_THRESHOLD.get()) {
+    double humanity = humanityData.humanity(targetId);
+    if (HumanityConfig.ENABLE_HUMANITY.get()
+            && humanity >= HumanityConfig.HIGH_HUMANITY_PROTECTED_THRESHOLD.get()) {
       return false;
     }
     if (bountyData.recentlyKilledPlayer(targetId, now)) {
       return true;
     }
-    return HumanityConfig.ENABLE_HUMANITY.get() && humanity <= HumanityConfig.LOW_HUMANITY_BOUNTY_THRESHOLD.get();
+    return HumanityConfig.ENABLE_HUMANITY.get()
+            && humanity <= HumanityConfig.LOW_HUMANITY_BOUNTY_THRESHOLD.get();
   }
 
   public static long taxFor(long amount) {
-    return Math.floorDiv(Math.round(amount * BountyConfig.TAX_PERCENT.get()), 100L);
+    double percent = BountyConfig.TAX_PERCENT.get();
+    if (amount <= 0L || percent <= 0.0D) {
+      return 0L;
+    }
+    double tax = amount * (percent / 100.0D);
+    if (tax >= Long.MAX_VALUE) {
+      return Long.MAX_VALUE;
+    }
+    return Math.max(0L, Math.round(tax));
   }
 }
