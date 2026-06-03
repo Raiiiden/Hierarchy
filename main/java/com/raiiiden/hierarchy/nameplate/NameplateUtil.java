@@ -35,8 +35,14 @@ public final class NameplateUtil {
     }
   }
 
+  public static Component clientNameplate(Player player, boolean isTeammate) {
+    if (!player.hasCustomName()) return player.getName();
+    // Arrow is now a separate world-space render — no longer prepended here
+    return player.getCustomName();
+  }
+
   public static Component clientNameplate(Player player) {
-    return player.hasCustomName() ? player.getCustomName() : player.getName();
+    return clientNameplate(player, false);
   }
 
   private static Component build(MinecraftServer server, String playerUuid, String username) {

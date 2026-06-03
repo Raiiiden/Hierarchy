@@ -4,6 +4,7 @@ import com.raiiiden.hierarchy.clan.combat.PvpDamageDecision;
 import com.raiiiden.hierarchy.clan.combat.PvpRelationship;
 import com.raiiiden.hierarchy.clan.config.ClanCombatConfig;
 import com.raiiiden.hierarchy.clan.data.ClanData;
+import com.raiiiden.hierarchy.clan.model.Clan;
 import com.raiiiden.hierarchy.nameplate.NameplateUtil;
 import java.util.HashMap;
 import java.util.Map;
@@ -57,6 +58,11 @@ public class ClanEvents {
     long now = System.currentTimeMillis();
     PvpDamageDecision decision = data.evaluateDamage(attacker.getUUID(), victim.getUUID(), now);
     if (decision.relationship() == PvpRelationship.SAME_CLAN) {
+      Clan clan = data.clanOf(attacker.getUUID()).orElse(null);
+      if (clan != null && clan.isInternalFriendlyFireEnabled()) {
+        // FF is on — allow the hit, don't cancel
+        return;
+      }
       event.setCanceled(true);
       warn(attacker, victim.getUUID(), "same_clan", "You cannot damage members of your own clan.", now);
       return;

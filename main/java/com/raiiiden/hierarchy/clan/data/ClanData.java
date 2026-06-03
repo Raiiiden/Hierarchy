@@ -82,6 +82,7 @@ public class ClanData extends SavedData {
       readUuidSet(clanTag.getList("Enemies", 8), clan.getEnemies());
       clan.setBankBalance(clanTag.getLong("BankBalance"));
       ListTag transactionTags = clanTag.getList("Transactions", 10);
+      clan.setInternalFriendlyFire(clanTag.getBoolean("InternalFF"));
       for (int j = 0; j < transactionTags.size(); j++) {
         CompoundTag transactionTag = transactionTags.getCompound(j);
         clan.getTransactions().add(new BankTransaction(
@@ -137,6 +138,7 @@ public class ClanData extends SavedData {
       clanTag.put("Allies", writeUuidSet(clan.getAllies()));
       clanTag.put("Enemies", writeUuidSet(clan.getEnemies()));
       clanTag.putLong("BankBalance", clan.getBankBalance());
+      clanTag.putBoolean("InternalFF", clan.isInternalFriendlyFireEnabled());
       ListTag transactionTags = new ListTag();
       for (BankTransaction transaction : clan.getTransactions()) {
         CompoundTag transactionTag = new CompoundTag();
@@ -624,6 +626,11 @@ public class ClanData extends SavedData {
     String id = playerId.toString();
     playerClanPvpDelayUntil.keySet().removeIf(key -> key.startsWith(id));
     clearCombatSnapshots(playerId);
+    setDirty();
+  }
+  public void setInternalFriendlyFire(Clan clan, boolean enabled) {
+    clan.setInternalFriendlyFire(enabled);
+    clearCombatSnapshots(clan, clan); // bust snapshots for all members
     setDirty();
   }
 }

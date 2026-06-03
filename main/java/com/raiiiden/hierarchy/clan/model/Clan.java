@@ -18,6 +18,9 @@ public class Clan {
   private final Set<UUID> allies = new LinkedHashSet<>();
   private final Set<UUID> enemies = new LinkedHashSet<>();
   private final LinkedList<BankTransaction> transactions = new LinkedList<>();
+  private boolean internalFriendlyFire = false;
+  public boolean isInternalFriendlyFireEnabled() { return internalFriendlyFire; }
+  public void setInternalFriendlyFire(boolean enabled) { this.internalFriendlyFire = enabled; }
 
   public Clan(UUID id, String name, UUID leader) {
     this.id = id;

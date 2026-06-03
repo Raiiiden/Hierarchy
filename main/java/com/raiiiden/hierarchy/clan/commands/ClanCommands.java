@@ -59,11 +59,13 @@ public final class ClanCommands {
         .then(Commands.literal("unally").then(Commands.argument("clan", StringArgumentType.word()).executes(ctx -> unally(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
         .then(Commands.literal("enemy").then(Commands.argument("clan", StringArgumentType.word()).executes(ctx -> enemy(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
         .then(Commands.literal("neutral").then(Commands.argument("clan", StringArgumentType.word()).executes(ctx -> neutral(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
-        .then(Commands.literal("ff")
-            .then(Commands.literal("request").then(Commands.argument("clan", StringArgumentType.word()).executes(ctx -> ffRequest(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
-            .then(Commands.literal("accept").then(Commands.argument("clan", StringArgumentType.word()).executes(ctx -> ffAccept(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
-            .then(Commands.literal("deny").then(Commands.argument("clan", StringArgumentType.word()).executes(ctx -> ffDeny(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
-            .then(Commands.literal("revoke").then(Commands.argument("clan", StringArgumentType.word()).executes(ctx -> ffRevoke(ctx.getSource(), StringArgumentType.getString(ctx, "clan"))))))
+            .then(Commands.literal("ff")
+                    .then(Commands.literal("request").then(Commands.argument("clan", StringArgumentType.word()).executes(ctx -> ffRequest(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
+                    .then(Commands.literal("accept").then(Commands.argument("clan", StringArgumentType.word()).executes(ctx -> ffAccept(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
+                    .then(Commands.literal("deny").then(Commands.argument("clan", StringArgumentType.word()).executes(ctx -> ffDeny(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
+                    .then(Commands.literal("revoke").then(Commands.argument("clan", StringArgumentType.word()).executes(ctx -> ffRevoke(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
+                    .then(Commands.literal("on").executes(ctx -> ffSelfOn(ctx.getSource())))
+                    .then(Commands.literal("off").executes(ctx -> ffSelfOff(ctx.getSource()))))  // <-- ff closes here, after on/off
         .then(Commands.literal("bank")
             .executes(ctx -> bank(ctx.getSource()))
             .then(Commands.literal("deposit").then(Commands.argument("amount", LongArgumentType.longArg(1L)).executes(ctx -> bankDeposit(ctx.getSource(), LongArgumentType.getLong(ctx, "amount")))))
@@ -826,5 +828,36 @@ public final class ClanCommands {
   private static int fail(CommandSourceStack source, String message) {
     source.sendFailure(Component.literal(message));
     return 0;
+  }
+  private static int ffSelfOn(CommandSourceStack source) {
+    ServerPlayer player = player(source);
+    if (!ClanCombatConfig.ENABLE_FRIENDLY_FIRE_SYSTEM.get()) {
+      return fail(source, "You do not have permission to do that.");
+    }
+    ClanData data = data(source);
+    Clan clan = ownManagedClan(source, data, player);
+    if (clan == null) return 0;
+    if (clan.isInternalFriendlyFireEnabled()) {
+      return fail(source, "Internal friendly fire is already enabled.");
+    }
+    data.setInternalFriendlyFire(clan, true);
+    notifyClan(source, data, clan, "Internal friendly fire has been enabled.", null);
+    return ok(source, "Internal friendly fire enabled.");
+  }
+
+  private static int ffSelfOff(CommandSourceStack source) {
+    ServerPlayer player = player(source);
+    if (!ClanCombatConfig.ENABLE_FRIENDLY_FIRE_SYSTEM.get()) {
+      return fail(source, "You do not have permission to do that.");
+    }
+    ClanData data = data(source);
+    Clan clan = ownManagedClan(source, data, player);
+    if (clan == null) return 0;
+    if (!clan.isInternalFriendlyFireEnabled()) {
+      return fail(source, "Internal friendly fire is already disabled.");
+    }
+    data.setInternalFriendlyFire(clan, false);
+    notifyClan(source, data, clan, "Internal friendly fire has been disabled.", null);
+    return ok(source, "Internal friendly fire disabled.");
   }
 }
