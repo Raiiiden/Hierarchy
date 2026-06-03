@@ -9,7 +9,11 @@ import com.raiiiden.hierarchy.nameplate.NameplateUtil;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+
+import com.raiiiden.hierarchy.nameplate.TabListManager;
+import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.world.entity.Entity;
@@ -18,6 +22,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.entity.item.PrimedTnt;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraftforge.event.ServerChatEvent;
 import net.minecraftforge.event.entity.living.LivingAttackEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -28,15 +33,66 @@ public class ClanEvents {
 
   @SubscribeEvent
   public void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
-    if (!(event.getEntity() instanceof ServerPlayer player)) {
-      return;
-    }
+    if (!(event.getEntity() instanceof ServerPlayer player)) return;
     ClanData data = ClanData.get(player.server);
     data.rememberPlayer(player.getUUID(), player.getGameProfile().getName());
     NameplateUtil.refresh(player);
     for (String message : data.drainNotifications(player.getUUID())) {
       player.sendSystemMessage(Component.literal(message));
     }
+    TabListManager.onPlayerJoined(player);
+    // Push per-viewer nameplates: new player sees everyone, everyone sees new player
+    for (ServerPlayer other : player.server.getPlayerList().getPlayers()) {
+      if (other == player) continue;
+      NameplateUtil.refreshForViewer(player, other);  // new player sees others
+      NameplateUtil.refreshForViewer(other, player);  // others see new player
+    }
+  }
+
+  @SubscribeEvent
+  public void onTabListName(PlayerEvent.TabListNameFormat event) {
+    if (!ClanCombatConfig.ENABLE_CLANS.get()) return;
+    if (!(event.getEntity() instanceof ServerPlayer player)) return;
+    ClanData data = ClanData.get(player.server);
+    Clan clan = data.clanOf(player.getUUID()).orElse(null);
+    if (clan == null || clan.getTag().isBlank()) return;
+    event.setDisplayName(
+            Component.literal("[" + clan.getTag() + "] ").withStyle(ChatFormatting.GOLD)
+                    .append(Component.literal(player.getGameProfile().getName())
+                            .withStyle(ChatFormatting.WHITE))
+    );
+  }
+
+  @SubscribeEvent
+  public void onServerChat(ServerChatEvent event) {
+    if (!ClanCombatConfig.ENABLE_CLANS.get()) return;
+
+    ServerPlayer sender = event.getPlayer();
+    ClanData data = ClanData.get(sender.server);
+    Clan senderClan = data.clanOf(sender.getUUID()).orElse(null);
+
+    if (senderClan == null || senderClan.getTag().isBlank()) return;
+
+    event.setCanceled(true);
+
+    String tag      = "[" + senderClan.getTag() + "] ";
+    String name     = sender.getGameProfile().getName();
+    Component body  = event.getMessage();
+
+    for (ServerPlayer viewer : sender.server.getPlayerList().getPlayers()) {
+      Clan viewerClan = data.clanOf(viewer.getUUID()).orElse(null);
+      ChatFormatting color = TabListManager.tagColor(viewerClan, senderClan, data);
+
+      MutableComponent line = Component.literal(tag).withStyle(color)
+              .append(Component.literal("<" + name + "> ").withStyle(ChatFormatting.WHITE))
+              .append(body.copy().withStyle(ChatFormatting.WHITE));
+      viewer.sendSystemMessage(line);
+    }
+
+    // Keep the console log that canceling would otherwise suppress
+    sender.server.sendSystemMessage(
+            Component.literal("<" + name + "> " + body.getString())
+    );
   }
 
   @SubscribeEvent

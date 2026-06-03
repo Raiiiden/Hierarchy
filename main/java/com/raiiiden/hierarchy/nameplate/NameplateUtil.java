@@ -1,5 +1,6 @@
 package com.raiiiden.hierarchy.nameplate;
 
+import com.raiiiden.hierarchy.Hierarchy;
 import com.raiiiden.hierarchy.bounty.config.BountyConfig;
 import com.raiiiden.hierarchy.bounty.data.BountyData;
 import com.raiiiden.hierarchy.clan.config.ClanCombatConfig;
@@ -10,34 +11,95 @@ import com.raiiiden.hierarchy.humanity.data.HumanityData;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket;
+import net.minecraft.network.syncher.EntityDataSerializers;
+import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
 public final class NameplateUtil {
   private static final String[] ROMAN = {"I", "II", "III", "IV", "V"};
 
+  // Entity DATA_CUSTOM_NAME is slot 2, DATA_CUSTOM_NAME_VISIBLE is slot 3.
+  // These are stable for all vanilla 1.20.x entities.
+  private static final int SLOT_CUSTOM_NAME         = 2;
+  private static final int SLOT_CUSTOM_NAME_VISIBLE = 3;
+
   private NameplateUtil() {}
 
+  /** Sets the canonical custom name on the player entity (seen by anyone without a per-viewer override). */
   public static void refresh(ServerPlayer player) {
     if (!NameplateConfig.ENABLE_CUSTOM_NAMEPLATES.get()) {
       player.setCustomName(null);
       player.setCustomNameVisible(false);
       return;
     }
-    player.setCustomName(build(player.server, player.getUUID().toString(), player.getGameProfile().getName()));
+    player.setCustomName(build(player.server, player.getUUID(), player.getGameProfile().getName(), null));
     player.setCustomNameVisible(true);
   }
 
+  /**
+   * Pushes a per-viewer nameplate packet directly to {@code viewer} for {@code target}.
+   * Builds the SynchedEntityData payload manually — never mutates the entity.
+   */
+  public static void refreshForViewer(ServerPlayer viewer, ServerPlayer target) {
+    if (!NameplateConfig.ENABLE_CUSTOM_NAMEPLATES.get()) return;
+
+    Component name = build(target.server, target.getUUID(), target.getGameProfile().getName(), viewer);
+
+    List<SynchedEntityData.DataValue<?>> values = List.of(
+            new SynchedEntityData.DataValue<>(
+                    SLOT_CUSTOM_NAME,
+                    EntityDataSerializers.OPTIONAL_COMPONENT,
+                    Optional.of(name)
+            ),
+            new SynchedEntityData.DataValue<>(
+                    SLOT_CUSTOM_NAME_VISIBLE,
+                    EntityDataSerializers.BOOLEAN,
+                    true
+            )
+    );
+
+    viewer.connection.send(new ClientboundSetEntityDataPacket(target.getId(), values));
+  }
+
+  /**
+   * Full refresh: sets the canonical name on every player, then pushes
+   * per-viewer overrides for every viewer/target pair.
+   */
   public static void refreshAll(MinecraftServer server) {
-    for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-      refresh(player);
+    List<ServerPlayer> players = server.getPlayerList().getPlayers();
+    for (ServerPlayer target : players) {
+      refresh(target);
+    }
+    for (ServerPlayer viewer : players) {
+      for (ServerPlayer target : players) {
+        if (viewer == target) continue;
+        refreshForViewer(viewer, target);
+      }
+    }
+  }
+
+  /**
+   * On join: refresh canonical name for the new player, then push
+   * per-viewer overrides in both directions.
+   */
+  public static void refreshOnJoin(ServerPlayer joined) {
+    refresh(joined);
+    for (ServerPlayer other : joined.server.getPlayerList().getPlayers()) {
+      if (other == joined) continue;
+      refreshForViewer(joined, other);
+      refreshForViewer(other, joined);
     }
   }
 
   public static Component clientNameplate(Player player, boolean isTeammate) {
     if (!player.hasCustomName()) return player.getName();
-    // Arrow is now a separate world-space render — no longer prepended here
     return player.getCustomName();
   }
 
@@ -45,20 +107,24 @@ public final class NameplateUtil {
     return clientNameplate(player, false);
   }
 
-  private static Component build(MinecraftServer server, String playerUuid, String username) {
-    java.util.UUID id = java.util.UUID.fromString(playerUuid);
+  // -------------------------------------------------------------------------
+
+  private static Component build(MinecraftServer server, UUID id, String username, ServerPlayer viewer) {
     MutableComponent component = Component.empty();
 
     if (NameplateConfig.SHOW_CLAN_TAG.get() && ClanCombatConfig.ENABLE_CLANS.get()) {
-      Clan clan = ClanData.get(server).clanOf(id).orElse(null);
-      if (clan != null && !clan.getTag().isBlank()) {
-        component.append(Component.literal("[" + clan.getTag() + "] ").withStyle(ChatFormatting.GREEN));
+      ClanData data = ClanData.get(server);
+      Clan targetClan = data.clanOf(id).orElse(null);
+      if (targetClan != null && !targetClan.getTag().isBlank()) {
+        ChatFormatting color = resolveTagColor(viewer, targetClan, data);
+        component.append(
+                Component.literal("[" + targetClan.getTag() + "] ").withStyle(color)
+        );
       }
     }
 
     component.append(Component.literal(username).withStyle(ChatFormatting.GRAY));
 
-    // Only call this once, using humanityDisplay() which returns int
     if (NameplateConfig.SHOW_HUMANITY.get() && HumanityConfig.ENABLE_HUMANITY.get()) {
       component.append(Component.literal(" "))
               .append(humanityLabel(HumanityData.get(server).humanityDisplay(id)));
@@ -73,8 +139,23 @@ public final class NameplateUtil {
     return component;
   }
 
+  private static ChatFormatting resolveTagColor(
+          ServerPlayer viewer,
+          Clan targetClan,
+          ClanData data
+  ) {
+    Clan viewerClan =
+            (viewer != null)
+                    ? data.clanOf(viewer.getUUID()).orElse(null)
+                    : null;
+
+    ChatFormatting result =
+            TabListManager.tagColor(viewerClan, targetClan, data);
+
+    return result;
+  }
+
   private static Component humanityLabel(int humanity) {
-    // Cast to int since MIN/MAX are now DoubleValue
     int min = HumanityConfig.MIN_HUMANITY.get().intValue();
     int max = HumanityConfig.MAX_HUMANITY.get().intValue();
     if (humanity < 0) {

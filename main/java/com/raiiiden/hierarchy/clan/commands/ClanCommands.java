@@ -4,6 +4,7 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.LongArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.suggestion.Suggestions;
 import com.raiiiden.hierarchy.Hierarchy;
 import com.raiiiden.hierarchy.clan.bank.BankPermission;
 import com.raiiiden.hierarchy.clan.bank.BankTransaction;
@@ -21,7 +22,10 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
+
+import com.raiiiden.hierarchy.nameplate.TabListManager;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -39,7 +43,12 @@ public final class ClanCommands {
   public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
     dispatcher.register(Commands.literal("clan")
         .requires(source -> source.getEntity() instanceof ServerPlayer && ClanCombatConfig.ENABLE_CLANS.get())
-        .then(Commands.literal("create").then(Commands.argument("name", StringArgumentType.word()).executes(ctx -> create(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
+            .then(Commands.literal("create")
+                    .then(Commands.argument("name", StringArgumentType.word())
+                            .then(Commands.argument("tag", StringArgumentType.word())
+                                    .executes(ctx -> create(ctx.getSource(),
+                                            StringArgumentType.getString(ctx, "name"),
+                                            StringArgumentType.getString(ctx, "tag"))))))
         .then(Commands.literal("disband").executes(ctx -> disband(ctx.getSource())))
         .then(Commands.literal("info").executes(ctx -> info(ctx.getSource())))
         .then(Commands.literal("list").executes(ctx -> list(ctx.getSource())))
@@ -78,22 +87,32 @@ public final class ClanCommands {
         .then(Commands.literal("role").then(Commands.argument("player", StringArgumentType.word()).executes(ctx -> role(ctx.getSource(), StringArgumentType.getString(ctx, "player"))))));
   }
 
-  private static int create(CommandSourceStack source, String name) {
+  private static int create(CommandSourceStack source, String name, String tag) {
     ServerPlayer player = player(source);
     ClanData data = data(source);
     data.rememberPlayer(player.getUUID(), player.getGameProfile().getName());
     if (data.clanOf(player.getUUID()).isPresent()) {
       return fail(source, "You are already in a clan.");
     }
+    if (name.length() > 16 || !name.matches("[A-Za-z0-9_]+")) {
+      return fail(source, "Clan name must be 1-16 letters, numbers, or underscores.");
+    }
     if (data.clanByName(name).isPresent()) {
       return fail(source, "A clan with that name already exists.");
+    }
+    if (tag.length() > 6 || !tag.matches("[A-Za-z0-9]+")) {
+      return fail(source, "Clan tag must be 1-6 letters or numbers.");
     }
     if (!chargeAction(source, data, player, null, ClanAction.CLAN_CREATE)) {
       return 0;
     }
-    data.createClan(name, player.getUUID());
+    Clan clan = data.createClan(name, player.getUUID());
+    clan.setTag(tag.toUpperCase(java.util.Locale.ROOT));
+    data.setDirty();
     NameplateUtil.refresh(player);
-    return ok(source, "Created clan " + name + ".");
+    TabListManager.refreshAll(source.getServer());
+    NameplateUtil.refresh(player);
+    return ok(source, "Created clan " + name + " [" + clan.getTag() + "].");
   }
 
   private static int disband(CommandSourceStack source) {
@@ -111,6 +130,7 @@ public final class ClanCommands {
     }
     notifyClan(source, data, clan, "Clan " + clan.getName() + " was disbanded.", "While you were offline, clan " + clan.getName() + " was disbanded.", player.getUUID());
     data.deleteClan(clan);
+    TabListManager.refreshAll(source.getServer());
     NameplateUtil.refreshAll(source.getServer());
     return ok(source, "Disbanded clan " + clan.getName() + ".");
   }
@@ -171,6 +191,8 @@ public final class ClanCommands {
     }
     data.addMember(clan, player.getUUID());
     NameplateUtil.refresh(player);
+    TabListManager.refreshAll(source.getServer());
+    NameplateUtil.refresh(player);
     notifyClan(source, data, clan, player.getGameProfile().getName() + " joined the clan.", player.getUUID());
     return ok(source, "Joined " + clan.getName() + ".");
   }
@@ -200,6 +222,8 @@ public final class ClanCommands {
       return fail(source, "You do not have permission to do that.");
     }
     data.removeMemberWithPvpDelay(clan, targetId, pvpAllowedAfter());
+    TabListManager.refreshAll(source.getServer());
+    NameplateUtil.refreshAll(source.getServer());
     refreshOnlineNameplate(source, targetId);
     notifyPlayer(source, data, targetId, "You were kicked from " + clan.getName() + ".", "While you were offline, you were kicked from " + clan.getName() + ".");
     return ok(source, "Kicked " + data.playerName(targetId) + ". PvP with their former clan is temporarily invalid.");
@@ -216,6 +240,8 @@ public final class ClanCommands {
       return fail(source, "Transfer leadership or disband the clan before leaving.");
     }
     data.removeMemberWithPvpDelay(clan, player.getUUID(), pvpAllowedAfter());
+    NameplateUtil.refresh(player);
+    TabListManager.refreshAll(source.getServer());
     NameplateUtil.refresh(player);
     notifyClan(source, data, clan, player.getGameProfile().getName() + " left the clan.", player.getUUID());
     return ok(source, "Left " + clan.getName() + ". PvP with your former clan is temporarily invalid.");
@@ -239,6 +265,8 @@ public final class ClanCommands {
       return fail(source, "You cannot promote this player.");
     }
     data.setDirty();
+    NameplateUtil.refreshAll(source.getServer());
+    TabListManager.refreshAll(source.getServer());
     notifyPlayer(source, data, targetId, "You were promoted to Co-Leader in " + clan.getName() + ".", "While you were offline, you were promoted to Co-Leader in " + clan.getName() + ".");
     return ok(source, "Promoted " + data.playerName(targetId) + " to co-leader.");
   }
@@ -261,6 +289,8 @@ public final class ClanCommands {
       return fail(source, "That player is not in your clan.");
     }
     data.setDirty();
+    NameplateUtil.refreshAll(source.getServer());
+    TabListManager.refreshAll(source.getServer());
     notifyPlayer(source, data, targetId, "You were demoted to member in " + clan.getName() + ".", "While you were offline, you were demoted to member in " + clan.getName() + ".");
     return ok(source, "Demoted " + data.playerName(targetId) + " to member.");
   }
@@ -285,6 +315,8 @@ public final class ClanCommands {
     clan.getCoLeaders().add(player.getUUID());
     clan.setLeader(targetId);
     data.setDirty();
+    NameplateUtil.refreshAll(source.getServer());
+    TabListManager.refreshAll(source.getServer());
     notifyClan(source, data, clan, data.playerName(targetId) + " is now the clan leader.", "While you were offline, leadership of " + clan.getName() + " was transferred to " + data.playerName(targetId) + ".", null);
     return 1;
   }
@@ -301,6 +333,7 @@ public final class ClanCommands {
     }
     clan.setTag(tag.toUpperCase(java.util.Locale.ROOT));
     data.setDirty();
+    TabListManager.refreshAll(source.getServer());
     NameplateUtil.refreshAll(source.getServer());
     return ok(source, "Clan tag set to [" + clan.getTag() + "].");
   }
@@ -350,6 +383,8 @@ public final class ClanCommands {
       return fail(source, "There is no alliance request from that clan.");
     }
     data.addAlliance(own, target);
+    TabListManager.refreshAll(source.getServer());
+    NameplateUtil.refreshAll(source.getServer());
     notifyClan(source, data, own, "Your clan accepted an alliance with " + target.getName() + ".", "While you were offline, your clan accepted an alliance with " + target.getName() + ".", player.getUUID());
     notifyClan(source, data, target, own.getName() + " accepted your alliance request.", "While you were offline, " + own.getName() + " accepted your alliance request.", null);
     return ok(source, "Accepted alliance with " + target.getName() + ".");
@@ -386,6 +421,8 @@ public final class ClanCommands {
       return 0;
     }
     data.removeAlliance(own, target, pvpAllowedAfter());
+    NameplateUtil.refreshAll(source.getServer());
+    TabListManager.refreshAll(source.getServer());
     notifyClan(source, data, own, "Your clan un-allied " + target.getName() + ". PvP is temporarily invalid.", "While you were offline, your clan un-allied " + target.getName() + ".", player.getUUID());
     notifyClan(source, data, target, own.getName() + " ended the alliance. PvP is temporarily invalid.", "While you were offline, " + own.getName() + " un-allied your clan.", null);
     return ok(source, "Ended alliance with " + target.getName() + ". PvP is temporarily invalid.");
@@ -452,6 +489,8 @@ public final class ClanCommands {
       return 0;
     }
     data.setFriendlyFire(own.getId(), target.getId(), true);
+    NameplateUtil.refreshAll(source.getServer());
+    TabListManager.refreshAll(source.getServer());
     notifyClan(source, data, own, "Friendly fire enabled with " + target.getName() + ".", "While you were offline, friendly fire was enabled with " + target.getName() + ".", player.getUUID());
     notifyClan(source, data, target, own.getName() + " accepted friendly fire.", "While you were offline, " + own.getName() + " accepted friendly fire.", null);
     return ok(source, "Friendly fire enabled with " + target.getName() + ".");
@@ -488,6 +527,8 @@ public final class ClanCommands {
       return 0;
     }
     data.revokeFriendlyFire(own.getId(), target.getId(), pvpAllowedAfter());
+    NameplateUtil.refreshAll(source.getServer());
+    TabListManager.refreshAll(source.getServer());
     notifyClan(source, data, own, "Friendly fire revoked with " + target.getName() + ".", "While you were offline, friendly fire was revoked with " + target.getName() + ".", player.getUUID());
     notifyClan(source, data, target, own.getName() + " revoked friendly fire. PvP is temporarily invalid.", "While you were offline, " + own.getName() + " revoked friendly fire.", null);
     return ok(source, "Friendly fire revoked.");
@@ -810,6 +851,8 @@ public final class ClanCommands {
     boolean paid = cost.withdraw(player, clan);
     if (paid) {
       data.setDirty();
+      NameplateUtil.refreshAll(source.getServer());
+      TabListManager.refreshAll(source.getServer());
       return true;
     }
     source.sendFailure(Component.literal("You do not have enough currency."));
@@ -859,5 +902,81 @@ public final class ClanCommands {
     data.setInternalFriendlyFire(clan, false);
     notifyClan(source, data, clan, "Internal friendly fire has been disabled.", null);
     return ok(source, "Internal friendly fire disabled.");
+  }
+  private static CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestClanMembers(
+          CommandSourceStack source, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+    if (!(source.getEntity() instanceof ServerPlayer player)) {
+      return builder.buildFuture();
+    }
+    ClanData data = data(source);
+    return data.clanOf(player.getUUID())
+            .map(clan -> net.minecraft.commands.SharedSuggestionProvider.suggest(
+                    clan.getMembers().stream()
+                            .filter(id -> !id.equals(player.getUUID()))
+                            .map(data::playerName),
+                    builder))
+            .orElseGet(builder::buildFuture);
+  }
+
+  private static CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestOtherClans(
+          CommandSourceStack source, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+    if (!(source.getEntity() instanceof ServerPlayer player)) {
+      return builder.buildFuture();
+    }
+    ClanData data = data(source);
+    UUID ownClanId = data.clanOf(player.getUUID()).map(Clan::getId).orElse(null);
+    return net.minecraft.commands.SharedSuggestionProvider.suggest(
+            data.clans().stream()
+                    .filter(c -> !c.getId().equals(ownClanId))
+                    .map(Clan::getName),
+            builder);
+  }
+
+  private static CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestAllies(
+          CommandSourceStack source, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+    if (!(source.getEntity() instanceof ServerPlayer player)) {
+      return builder.buildFuture();
+    }
+    ClanData data = data(source);
+    return data.clanOf(player.getUUID())
+            .map(clan -> net.minecraft.commands.SharedSuggestionProvider.suggest(
+                    clan.getAllies().stream()
+                            .map(data::clan)
+                            .flatMap(java.util.Optional::stream)
+                            .map(Clan::getName),
+                    builder))
+            .orElseGet(builder::buildFuture);
+  }
+
+  private static CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestIncomingAllianceRequests(
+          CommandSourceStack source, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+    if (!(source.getEntity() instanceof ServerPlayer player)) {
+      return builder.buildFuture();
+    }
+    ClanData data = data(source);
+    return data.clanOf(player.getUUID())
+            .map(own -> net.minecraft.commands.SharedSuggestionProvider.suggest(
+                    data.clans().stream()
+                            .filter(c -> !c.getId().equals(own.getId()) && data.hasAllianceRequest(c.getId(), own.getId()))
+                            .map(Clan::getName),
+                    builder))
+            .orElseGet(builder::buildFuture);
+  }
+
+  private static CompletableFuture<Suggestions> suggestIncomingFfRequests(
+          CommandSourceStack source, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+    if (!(source.getEntity() instanceof ServerPlayer player)) {
+      return builder.buildFuture();
+    }
+    ClanData data = data(source);
+    return data.clanOf(player.getUUID())
+            .map(own -> net.minecraft.commands.SharedSuggestionProvider.suggest(
+                    own.getAllies().stream()
+                            .filter(allyId -> data.hasFriendlyFireRequest(allyId, own.getId()))
+                            .map(data::clan)
+                            .flatMap(java.util.Optional::stream)
+                            .map(Clan::getName),
+                    builder))
+            .orElseGet(builder::buildFuture);
   }
 }
