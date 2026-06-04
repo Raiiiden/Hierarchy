@@ -5,6 +5,7 @@ import com.raiiiden.hierarchy.clan.combat.PvpRelationship;
 import com.raiiiden.hierarchy.clan.config.ClanCombatConfig;
 import com.raiiiden.hierarchy.clan.data.ClanData;
 import com.raiiiden.hierarchy.clan.model.Clan;
+import com.raiiiden.hierarchy.nameplate.NameplateConfig;
 import com.raiiiden.hierarchy.nameplate.NameplateUtil;
 import java.util.HashMap;
 import java.util.Map;
@@ -41,12 +42,23 @@ public class ClanEvents {
       player.sendSystemMessage(Component.literal(message));
     }
     TabListManager.onPlayerJoined(player);
-    // Push per-viewer nameplates: new player sees everyone, everyone sees new player
     for (ServerPlayer other : player.server.getPlayerList().getPlayers()) {
       if (other == player) continue;
-      NameplateUtil.refreshForViewer(player, other);  // new player sees others
-      NameplateUtil.refreshForViewer(other, player);  // others see new player
+      NameplateUtil.refreshForViewer(player, other);
+      NameplateUtil.refreshForViewer(other, player);
     }
+
+    // Sync server-side nameplate distances so the client uses the server's config values
+    com.raiiiden.hierarchy.network.NetworkHandler.CHANNEL.sendTo(
+            new com.raiiiden.hierarchy.network.SyncNameplateConfigPacket(
+                    NameplateConfig.MAX_RENDER_DISTANCE_BLOCKS.get(),
+                    NameplateConfig.TEAMMATE_RENDER_DISTANCE_BLOCKS.get(),
+                    NameplateConfig.ARROW_RENDER_DISTANCE_BLOCKS.get()),
+            player.connection.connection,
+            net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT);
+
+    // Populate client clan cache — fixes the "green arrow on everyone" bug
+    data.syncClanMembersToPlayer(player.getUUID());
   }
 
   @SubscribeEvent

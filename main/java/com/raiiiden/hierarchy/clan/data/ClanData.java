@@ -24,6 +24,7 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.scores.PlayerTeam;
@@ -206,22 +207,22 @@ public class ClanData extends SavedData {
     clans.put(clan.getId(), clan);
     clanNameIndex.put(normalize(name), clan.getId().toString());
     playerClans.put(leader, clan.getId());
-    // Sync
-    PlayerTeam team = getOrCreateTeam(clan);
-    if (team != null && server != null) {
-      String leaderName = playerName(leader);
-      server.getScoreboard().addPlayerToTeam(leaderName, team);
+    if (ClanCombatConfig.USE_VANILLA_TEAMS.get()) {
+      PlayerTeam team = getOrCreateTeam(clan);
+      if (team != null && server != null) {
+        server.getScoreboard().addPlayerToTeam(playerName(leader), team);
+      }
     }
     setDirty();
     return clan;
   }
 
   public void deleteClan(Clan clan) {
+    java.util.List<UUID> formerMembers = new java.util.ArrayList<>(clan.getMembers());
+
     for (UUID allyId : new ArrayList<>(clan.getAllies())) {
       Clan ally = clans.get(allyId);
-      if (ally != null) {
-        ally.getAllies().remove(clan.getId());
-      }
+      if (ally != null) ally.getAllies().remove(clan.getId());
       String pair = ClanPair.key(clan.getId(), allyId);
       friendlyFire.remove(pair);
       pvpDelayUntil.remove(pair);
@@ -236,14 +237,17 @@ public class ClanData extends SavedData {
     clans.remove(clan.getId());
     clanNameIndex.remove(normalize(clan.getName()));
     pendingInvites.values().removeIf(clan.getId()::equals);
-    if (server != null) {
+    if (ClanCombatConfig.USE_VANILLA_TEAMS.get() && server != null) {
       String teamName = "clan_" + clan.getId().toString().replace("-", "").substring(0, 16);
       PlayerTeam team = server.getScoreboard().getPlayerTeam(teamName);
-      if (team != null) {
-        server.getScoreboard().removePlayerTeam(team);
-      }
+      if (team != null) server.getScoreboard().removePlayerTeam(team);
     }
     setDirty();
+
+    // clanOf(member) is now empty for all former members → sends empty set to each
+    for (UUID member : formerMembers) {
+      syncClanMembersToPlayer(member);
+    }
   }
 
   public void addMember(Clan clan, UUID playerId) {
@@ -251,12 +255,14 @@ public class ClanData extends SavedData {
     playerClans.put(playerId, clan.getId());
     pendingInvites.remove(playerId);
     clearCombatSnapshots(playerId);
-    // Sync
-    PlayerTeam team = getOrCreateTeam(clan);
-    if (team != null && server != null) {
-      server.getScoreboard().addPlayerToTeam(playerName(playerId), team);
+    if (ClanCombatConfig.USE_VANILLA_TEAMS.get()) {
+      PlayerTeam team = getOrCreateTeam(clan);
+      if (team != null && server != null) {
+        server.getScoreboard().addPlayerToTeam(playerName(playerId), team);
+      }
     }
     setDirty();
+    syncClanMembersToAllOnlinePlayers();
   }
 
   public void removeMember(Clan clan, UUID playerId) {
@@ -264,10 +270,11 @@ public class ClanData extends SavedData {
     clan.getCoLeaders().remove(playerId);
     playerClans.remove(playerId);
     clearCombatSnapshots(playerId);
-    if (server != null) {
+    if (ClanCombatConfig.USE_VANILLA_TEAMS.get() && server != null) {
       server.getScoreboard().removePlayerFromTeam(playerName(playerId));
     }
     setDirty();
+    syncClanMembersToAllOnlinePlayers();
   }
 
   public void removeMemberWithPvpDelay(Clan clan, UUID playerId, long delayUntil) {
@@ -607,12 +614,18 @@ public class ClanData extends SavedData {
   }
   public void resyncTeams() {
     if (server == null) return;
-    for (Clan clan : clans.values()) {
-      PlayerTeam team = getOrCreateTeam(clan);
-      if (team == null) continue;
-      for (UUID memberId : clan.getMembers()) {
-        server.getScoreboard().addPlayerToTeam(playerName(memberId), team);
+    if (ClanCombatConfig.USE_VANILLA_TEAMS.get()) {
+      for (Clan clan : clans.values()) {
+        PlayerTeam team = getOrCreateTeam(clan);
+        if (team == null) continue;
+        for (UUID memberId : clan.getMembers()) {
+          server.getScoreboard().addPlayerToTeam(playerName(memberId), team);
+        }
       }
+    }
+    // Always re-push packet cache so the client arrow is correct regardless of teams setting
+    for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+      syncClanMembersToPlayer(player.getUUID());
     }
   }
   public void clearAllPvpDelays() {
@@ -632,5 +645,27 @@ public class ClanData extends SavedData {
     clan.setInternalFriendlyFire(enabled);
     clearCombatSnapshots(clan, clan); // bust snapshots for all members
     setDirty();
+  }
+  public void syncClanMembersToPlayer(UUID playerId) {
+    if (server == null) return;
+    ServerPlayer online = server.getPlayerList().getPlayer(playerId);
+    if (online == null) return;
+    Clan clan = clanOf(playerId).orElse(null);
+    java.util.Set<UUID> mates = new java.util.HashSet<>();
+    if (clan != null) {
+      for (UUID memberId : clan.getMembers()) {
+        if (!memberId.equals(playerId)) mates.add(memberId);
+      }
+    }
+    com.raiiiden.hierarchy.network.NetworkHandler.CHANNEL.sendTo(
+            new com.raiiiden.hierarchy.network.SyncClanMembersPacket(mates),
+            online.connection.connection,
+            net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT);
+  }
+  public void syncClanMembersToAllOnlinePlayers() {
+    if (server == null) return;
+    for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+      syncClanMembersToPlayer(player.getUUID());
+    }
   }
 }

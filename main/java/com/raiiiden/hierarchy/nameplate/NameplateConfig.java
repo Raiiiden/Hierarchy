@@ -28,10 +28,10 @@ public final class NameplateConfig {
     ARROW_SCALE = builder.comment("Scale of the teammate arrow glyph (nameplate text is ~0.025).")
             .defineInRange("arrowScale", 0.055D, 0.01D, 0.2D);
     ARROW_RENDER_DISTANCE_BLOCKS = builder.comment("Max distance the teammate arrow is visible. Independent of nameplate distance.")
-            .defineInRange("arrowRenderDistanceBlocks", 32.0D, 0.0D, 256.0D);
+            .defineInRange("arrowRenderDistanceBlocks", 100.0D, 0.0D, 256.0D);
     TEAMMATE_RENDER_DISTANCE_BLOCKS = builder.comment("Extended nameplate distance for clan teammates.").defineInRange("teammateRenderDistanceBlocks", 16.0D, 0.0D, 256.0D);
     SHOW_BOUNTY_ICON = builder.comment("Show a red bounty icon next to players with an active bounty.").define("showBountyIcon", true);
-    MAX_RENDER_DISTANCE_BLOCKS = builder.comment("Maximum distance in blocks where custom nameplates are visible.").defineInRange("maxRenderDistanceBlocks", 3.0D, 0.0D, 128.0D);
+    MAX_RENDER_DISTANCE_BLOCKS = builder.comment("Maximum distance in blocks where custom nameplates are visible.").defineInRange("maxRenderDistanceBlocks", 5.0D, 0.0D, 128.0D);
     REQUIRE_LINE_OF_SIGHT = builder.comment("When true, custom nameplates are hidden behind blocks.").define("requireLineOfSight", true);
     builder.pop();
     SPEC = builder.build();

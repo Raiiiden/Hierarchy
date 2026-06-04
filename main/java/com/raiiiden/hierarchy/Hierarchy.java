@@ -9,6 +9,7 @@ import com.raiiiden.hierarchy.clan.config.ClanCombatConfig;
 import com.raiiiden.hierarchy.clan.events.ClanEvents;
 import com.raiiiden.hierarchy.humanity.config.HumanityConfig;
 import com.raiiiden.hierarchy.nameplate.NameplateConfig;
+import com.raiiiden.hierarchy.network.NetworkHandler;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
@@ -27,6 +28,7 @@ public class Hierarchy {
     ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, BountyConfig.SPEC, "hierarchy-bounty.toml");
     ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, HumanityConfig.SPEC, "hierarchy-humanity.toml");
     ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, NameplateConfig.SPEC, "hierarchy-nameplates.toml");
+    NetworkHandler.register();
     MinecraftForge.EVENT_BUS.addListener(this::registerCommands);
     MinecraftForge.EVENT_BUS.register(new ClanEvents());
     MinecraftForge.EVENT_BUS.register(new BountyEvents());

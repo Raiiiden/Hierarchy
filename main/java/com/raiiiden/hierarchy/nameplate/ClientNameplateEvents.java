@@ -12,9 +12,8 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.scores.PlayerTeam;
-import net.minecraft.world.scores.Scoreboard;
 import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.client.event.RenderNameTagEvent;
 import net.minecraftforge.eventbus.api.Event;
@@ -39,11 +38,11 @@ public final class ClientNameplateEvents {
       return;
     }
 
-    boolean isTeammate = areTeammates(minecraft, viewer, player);
+    boolean isTeammate = ClientClanCache.isClanmate(player.getUUID());
 
     double maxDistance = isTeammate
-            ? NameplateConfig.TEAMMATE_RENDER_DISTANCE_BLOCKS.get()
-            : NameplateConfig.MAX_RENDER_DISTANCE_BLOCKS.get();
+            ? ClientClanCache.teammateRenderDistance()
+            : ClientClanCache.maxRenderDistance();
 
     if (maxDistance > 0.0D && viewer.distanceToSqr(player) > maxDistance * maxDistance) {
       event.setResult(Event.Result.DENY);
@@ -73,7 +72,7 @@ public final class ClientNameplateEvents {
     PoseStack poseStack = event.getPoseStack();
     MultiBufferSource.BufferSource bufferSource = mc.renderBuffers().bufferSource();
 
-    double maxDist = NameplateConfig.ARROW_RENDER_DISTANCE_BLOCKS.get();
+    double maxDist = ClientClanCache.arrowRenderDistance();
     float scale = NameplateConfig.ARROW_SCALE.get().floatValue();
     double yOffset = NameplateConfig.ARROW_Y_OFFSET.get();
 
@@ -81,16 +80,16 @@ public final class ClientNameplateEvents {
 
     for (Player target : mc.level.players()) {
       if (target == mc.player) continue;
-      if (!areTeammates(mc, mc.player, target)) continue;
+      if (!ClientClanCache.isClanmate(target.getUUID())) continue;
       if (maxDist > 0 && mc.player.distanceToSqr(target) > maxDist * maxDist) continue;
-      if (NameplateConfig.REQUIRE_LINE_OF_SIGHT.get() && !mc.player.hasLineOfSight(target)) continue;
+      if (NameplateConfig.REQUIRE_LINE_OF_SIGHT.get()
+              && !mc.player.hasLineOfSight(target)) continue;
 
       float partial = event.getPartialTick();
       double dx = (target.xo + (target.getX() - target.xo) * partial) - camPos.x;
       double dy = (target.yo + (target.getY() - target.yo) * partial) - camPos.y;
       double dz = (target.zo + (target.getZ() - target.zo) * partial) - camPos.z;
 
-      // Place it above the nameplate: bbHeight + nameplate offset + extra offset
       double arrowY = dy + target.getBbHeight() + 0.5 + yOffset;
 
       poseStack.pushPose();
@@ -100,17 +99,9 @@ public final class ClientNameplateEvents {
 
       int halfWidth = mc.font.width(arrow) / 2;
       mc.font.drawInBatch(
-              arrow,
-              -halfWidth,
-              0,
-              0xFF55FF55, // bright green, explicit ARGB
-              false,
-              poseStack.last().pose(),
-              bufferSource,
-              Font.DisplayMode.NORMAL,
-              0,
-              LightTexture.FULL_BRIGHT
-      );
+              arrow, -halfWidth, 0, 0xFF55FF55, false,
+              poseStack.last().pose(), bufferSource,
+              Font.DisplayMode.NORMAL, 0, LightTexture.FULL_BRIGHT);
 
       poseStack.popPose();
     }
@@ -118,11 +109,9 @@ public final class ClientNameplateEvents {
     bufferSource.endBatch();
   }
 
-  private static boolean areTeammates(Minecraft minecraft, Entity viewer, Player target) {
-    if (!(viewer instanceof Player localPlayer) || minecraft.level == null) return false;
-    Scoreboard scoreboard = minecraft.level.getScoreboard();
-    PlayerTeam viewerTeam = scoreboard.getPlayersTeam(localPlayer.getGameProfile().getName());
-    PlayerTeam targetTeam = scoreboard.getPlayersTeam(target.getGameProfile().getName());
-    return viewerTeam != null && viewerTeam == targetTeam;
+  // Clear the cache when disconnecting so it doesn't bleed into the next session
+  @SubscribeEvent
+  public static void onClientLogout(ClientPlayerNetworkEvent.LoggingOut event) {
+    ClientClanCache.clear();
   }
 }

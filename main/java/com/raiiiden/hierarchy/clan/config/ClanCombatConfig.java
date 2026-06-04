@@ -9,6 +9,7 @@ import net.minecraftforge.common.ForgeConfigSpec;
 public final class ClanCombatConfig {
   public static final ForgeConfigSpec SPEC;
   public static final ForgeConfigSpec.BooleanValue ENABLE_CLANS;
+  public static final ForgeConfigSpec.BooleanValue USE_VANILLA_TEAMS;
   public static final ForgeConfigSpec.BooleanValue ENABLE_FRIENDLY_FIRE_SYSTEM;
   public static final ForgeConfigSpec.LongValue PVP_DELAY_SECONDS;
   public static final ForgeConfigSpec.BooleanValue ENABLE_RELATIONSHIP_SNAPSHOTS;
@@ -56,6 +57,11 @@ public final class ClanCombatConfig {
     ENABLE_CLANS = builder
         .comment("Enable clan commands and clan PvP enforcement.")
         .define("enableClans", true);
+    USE_VANILLA_TEAMS = builder
+            .comment("Use vanilla scoreboard teams for clan membership (collision rules, /team commands, etc). " +
+                    "Default false: membership is synced via packets only, avoiding scoreboard pollution from " +
+                    "other mods or game events corrupting the teammate check.")
+            .define("useVanillaTeams", false);
     ENABLE_FRIENDLY_FIRE_SYSTEM = builder
         .comment("Enable friendly fire request, acceptance, and revoke commands between allied clans.")
         .define("enableFriendlyFireSystem", true);
