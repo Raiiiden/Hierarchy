@@ -32,15 +32,20 @@ public final class NameplateUtil {
 
   private NameplateUtil() {}
 
-  /** Sets the canonical custom name on the player entity (seen by anyone without a per-viewer override). */
-  public static void refresh(ServerPlayer player) {
+  // Sets the canonical custom name on the player entity (seen by anyone without a per-viewer override)
+  public static void refresh(ServerPlayer target) {
     if (!NameplateConfig.ENABLE_CUSTOM_NAMEPLATES.get()) {
-      player.setCustomName(null);
-      player.setCustomNameVisible(false);
+      target.setCustomName(null);
+      target.setCustomNameVisible(false);
       return;
     }
-    player.setCustomName(build(player.server, player.getUUID(), player.getGameProfile().getName(), null));
-    player.setCustomNameVisible(true);
+    // Mark visible server-side so vanilla spawn packets are correct
+    target.setCustomNameVisible(true);
+    // Push a per-viewer colored name to every currently online player
+    for (ServerPlayer viewer : target.server.getPlayerList().getPlayers()) {
+      if (viewer == target) continue;
+      refreshForViewer(viewer, target);
+    }
   }
 
   /**
@@ -75,10 +80,13 @@ public final class NameplateUtil {
   public static void refreshAll(MinecraftServer server) {
     List<ServerPlayer> players = server.getPlayerList().getPlayers();
     for (ServerPlayer target : players) {
-      refresh(target);
-    }
-    for (ServerPlayer viewer : players) {
-      for (ServerPlayer target : players) {
+      if (!NameplateConfig.ENABLE_CUSTOM_NAMEPLATES.get()) {
+        target.setCustomName(null);
+        target.setCustomNameVisible(false);
+        continue;
+      }
+      target.setCustomNameVisible(true);
+      for (ServerPlayer viewer : players) {
         if (viewer == target) continue;
         refreshForViewer(viewer, target);
       }

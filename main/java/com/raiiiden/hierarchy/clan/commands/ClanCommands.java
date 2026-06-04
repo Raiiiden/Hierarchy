@@ -190,9 +190,8 @@ public final class ClanCommands {
       return fail(source, "You do not have a pending clan invite.");
     }
     data.addMember(clan, player.getUUID());
-    NameplateUtil.refresh(player);
     TabListManager.refreshAll(source.getServer());
-    NameplateUtil.refresh(player);
+    NameplateUtil.refreshAll(source.getServer());  // covers all viewer/target pairs
     notifyClan(source, data, clan, player.getGameProfile().getName() + " joined the clan.", player.getUUID());
     return ok(source, "Joined " + clan.getName() + ".");
   }
