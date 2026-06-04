@@ -130,6 +130,7 @@ public final class ClanCommands {
     }
     notifyClan(source, data, clan, "Clan " + clan.getName() + " was disbanded.", "While you were offline, clan " + clan.getName() + " was disbanded.", player.getUUID());
     data.deleteClan(clan);
+    data.syncClanMembersToAllOnlinePlayers();
     TabListManager.refreshAll(source.getServer());
     NameplateUtil.refreshAll(source.getServer());
     return ok(source, "Disbanded clan " + clan.getName() + ".");
@@ -264,6 +265,7 @@ public final class ClanCommands {
       return fail(source, "You cannot promote this player.");
     }
     data.setDirty();
+    data.syncClanMembersToAllOnlinePlayers();
     NameplateUtil.refreshAll(source.getServer());
     TabListManager.refreshAll(source.getServer());
     notifyPlayer(source, data, targetId, "You were promoted to Co-Leader in " + clan.getName() + ".", "While you were offline, you were promoted to Co-Leader in " + clan.getName() + ".");
@@ -288,6 +290,7 @@ public final class ClanCommands {
       return fail(source, "That player is not in your clan.");
     }
     data.setDirty();
+    data.syncClanMembersToAllOnlinePlayers();
     NameplateUtil.refreshAll(source.getServer());
     TabListManager.refreshAll(source.getServer());
     notifyPlayer(source, data, targetId, "You were demoted to member in " + clan.getName() + ".", "While you were offline, you were demoted to member in " + clan.getName() + ".");

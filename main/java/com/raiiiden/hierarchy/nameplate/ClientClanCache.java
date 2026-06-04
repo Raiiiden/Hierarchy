@@ -4,6 +4,7 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 
 import java.util.Collections;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -14,8 +15,9 @@ public final class ClientClanCache {
 
     private static final Set<UUID> clanmates =
             Collections.newSetFromMap(new ConcurrentHashMap<>());
+    private static final Map<UUID, String> clanmateRoles = new ConcurrentHashMap<>();
+    private static final Map<UUID, String> allPlayerRoles = new ConcurrentHashMap<>();
 
-    // -1 = not synced yet, fall back to local config value
     private static volatile double syncedMaxRender      = -1;
     private static volatile double syncedTeammateRender = -1;
     private static volatile double syncedArrowRender    = -1;
@@ -23,10 +25,31 @@ public final class ClientClanCache {
     public static void setClanmates(Set<UUID> ids) {
         clanmates.clear();
         clanmates.addAll(ids);
+        clanmateRoles.clear();
+    }
+
+    public static void setClanmates(Set<UUID> ids, Map<UUID, String> roles) {
+        clanmates.clear();
+        clanmates.addAll(ids);
+        clanmateRoles.clear();
+        clanmateRoles.putAll(roles);
+    }
+
+    public static void setAllPlayerRoles(Map<UUID, String> roles) {
+        allPlayerRoles.clear();
+        allPlayerRoles.putAll(roles);
     }
 
     public static boolean isClanmate(UUID id) {
         return clanmates.contains(id);
+    }
+
+    public static String clanmateRole(UUID id) {
+        return clanmateRoles.getOrDefault(id, "");
+    }
+
+    public static String playerRole(UUID id) {
+        return allPlayerRoles.getOrDefault(id, "");
     }
 
     public static void setNameplateDistances(double max, double teammate, double arrow) {
@@ -52,6 +75,8 @@ public final class ClientClanCache {
 
     public static void clear() {
         clanmates.clear();
+        clanmateRoles.clear();
+        allPlayerRoles.clear();
         syncedMaxRender      = -1;
         syncedTeammateRender = -1;
         syncedArrowRender    = -1;

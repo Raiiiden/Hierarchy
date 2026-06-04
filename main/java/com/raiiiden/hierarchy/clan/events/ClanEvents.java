@@ -58,7 +58,7 @@ public class ClanEvents {
             net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT);
 
     // Populate client clan cache — fixes the "green arrow on everyone" bug
-    data.syncClanMembersToPlayer(player.getUUID());
+    data.syncClanMembersToAllOnlinePlayers();
   }
 
   @SubscribeEvent

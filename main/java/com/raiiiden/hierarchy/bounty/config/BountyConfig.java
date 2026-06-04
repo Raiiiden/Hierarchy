@@ -12,6 +12,7 @@ public final class BountyConfig {
   public static final ForgeConfigSpec.BooleanValue PAUSE_BOUNTY_WHILE_TARGET_OFFLINE;
   public static final ForgeConfigSpec.BooleanValue PAUSE_COOLDOWN_WHILE_OFFLINE;
   public static final ForgeConfigSpec.LongValue RECENT_PLAYER_KILL_ELIGIBILITY_SECONDS;
+  public static final ForgeConfigSpec.DoubleValue MAX_ELIGIBLE_HUMANITY;
   public static final ForgeConfigSpec.LongValue MIN_BOUNTY_AMOUNT;
   public static final ForgeConfigSpec.LongValue PLACE_CURRENCY_COST;
   public static final ForgeConfigSpec.LongValue CONTRIBUTE_CURRENCY_COST;
@@ -31,15 +32,16 @@ public final class BountyConfig {
     PAUSE_BOUNTY_WHILE_TARGET_OFFLINE = builder.define("pauseBountyWhileTargetOffline", true);
     PAUSE_COOLDOWN_WHILE_OFFLINE = builder.comment("Defaults false: cooldowns continue while offline.").define("pauseCooldownWhileOffline", false);
     RECENT_PLAYER_KILL_ELIGIBILITY_SECONDS = builder.defineInRange("recentPlayerKillEligibilitySeconds", 1800L, 1L, 604800L);
-    MIN_BOUNTY_AMOUNT = builder.defineInRange("minimumBountyAmount", 1L, 1L, Long.MAX_VALUE);
+    MAX_ELIGIBLE_HUMANITY = builder.comment("Players at or below this humanity can receive bounties. Default 50 covers Hero I through Bandit V on the default -100..100 scale.").defineInRange("maxEligibleHumanity", 50.0D, -Double.MAX_VALUE, Double.MAX_VALUE);
+    MIN_BOUNTY_AMOUNT = builder.comment("Legacy amount setting kept for old configs; item bounties use reward slots.").defineInRange("minimumBountyAmount", 1L, 1L, Long.MAX_VALUE);
     builder.pop();
     builder.push("bountyCurrencyCosts");
-    PLACE_CURRENCY_COST = builder.defineInRange("place", 0L, 0L, Long.MAX_VALUE);
+    PLACE_CURRENCY_COST = builder.comment("Bounty placement cost when common playerCurrencyType is item. Uses the common configured currency item.").defineInRange("place", 10L, 0L, Long.MAX_VALUE);
     CONTRIBUTE_CURRENCY_COST = builder.defineInRange("contribute", 0L, 0L, Long.MAX_VALUE);
     CLAIM_CURRENCY_COST = builder.defineInRange("claim", 0L, 0L, Long.MAX_VALUE);
     builder.pop();
     builder.push("bountyXpCosts");
-    PLACE_XP_COST = builder.defineInRange("place", 0, 0, Integer.MAX_VALUE);
+    PLACE_XP_COST = builder.comment("Bounty placement cost when common playerCurrencyType is xp. Cost is XP levels.").defineInRange("place", 5, 0, Integer.MAX_VALUE);
     CONTRIBUTE_XP_COST = builder.defineInRange("contribute", 0, 0, Integer.MAX_VALUE);
     CLAIM_XP_COST = builder.defineInRange("claim", 0, 0, Integer.MAX_VALUE);
     builder.pop();

@@ -39,11 +39,8 @@ public final class BountyLogic {
             && humanity >= HumanityConfig.HIGH_HUMANITY_PROTECTED_THRESHOLD.get()) {
       return false;
     }
-    if (bountyData.recentlyKilledPlayer(targetId, now)) {
-      return true;
-    }
-    return HumanityConfig.ENABLE_HUMANITY.get()
-            && humanity <= HumanityConfig.LOW_HUMANITY_BOUNTY_THRESHOLD.get();
+    return bountyData.recentlyKilledPlayer(targetId, now)
+            || humanity <= BountyConfig.MAX_ELIGIBLE_HUMANITY.get();
   }
 
   public static long taxFor(long amount) {

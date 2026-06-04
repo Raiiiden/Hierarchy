@@ -12,6 +12,8 @@ import com.raiiiden.hierarchy.humanity.data.HumanityData;
 import com.raiiiden.hierarchy.nameplate.NameplateUtil;
 import java.util.UUID;
 import net.minecraft.ChatFormatting;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.StringTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
@@ -173,8 +175,16 @@ public class BountyEvents {
   }
 
   public static ItemStack createDogTag(Bounty bounty, UUID killerId) {
-    ItemStack stack = new ItemStack(Items.PAPER);
-    stack.setHoverName(Component.literal("Dog Tag: " + bounty.targetName()).withStyle(ChatFormatting.GOLD));
+    ItemStack stack = new ItemStack(Items.TRIPWIRE_HOOK);
+    stack.setHoverName(Component.literal("Bounty Contract").withStyle(ChatFormatting.GOLD));
+    ListTag lore = new ListTag();
+    lore.add(StringTag.valueOf(Component.Serializer.toJson(Component.literal("Target:").withStyle(ChatFormatting.GRAY))));
+    lore.add(StringTag.valueOf(Component.Serializer.toJson(Component.literal(bounty.targetName()).withStyle(ChatFormatting.WHITE))));
+    lore.add(StringTag.valueOf(Component.Serializer.toJson(Component.literal("Rewards:").withStyle(ChatFormatting.GRAY))));
+    for (Bounty.RewardItem reward : bounty.rewards()) {
+      lore.add(StringTag.valueOf(Component.Serializer.toJson(Component.literal(reward.stack().getCount() + "x " + reward.stack().getHoverName().getString()).withStyle(ChatFormatting.WHITE))));
+    }
+    stack.getOrCreateTagElement("display").put("Lore", lore);
     stack.getOrCreateTag().putUUID("BountyId", bounty.id());
     stack.getOrCreateTag().putUUID("BountyTarget", bounty.targetId());
     stack.getOrCreateTag().putUUID("BountyKiller", killerId);
@@ -183,12 +193,12 @@ public class BountyEvents {
 
   public static ItemStack findDogTag(ServerPlayer player) {
     for (ItemStack stack : player.getInventory().items) {
-      if (!stack.isEmpty() && stack.hasTag() && stack.getOrCreateTag().hasUUID("BountyTarget")) {
+      if (!stack.isEmpty() && stack.hasTag() && stack.getOrCreateTag().hasUUID("BountyId") && stack.getOrCreateTag().hasUUID("BountyTarget")) {
         return stack;
       }
     }
     ItemStack offhand = player.getOffhandItem();
-    if (!offhand.isEmpty() && offhand.hasTag() && offhand.getOrCreateTag().hasUUID("BountyTarget")) {
+    if (!offhand.isEmpty() && offhand.hasTag() && offhand.getOrCreateTag().hasUUID("BountyId") && offhand.getOrCreateTag().hasUUID("BountyTarget")) {
       return offhand;
     }
     return ItemStack.EMPTY;

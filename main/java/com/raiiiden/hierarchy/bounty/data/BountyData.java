@@ -14,6 +14,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.saveddata.SavedData;
 
@@ -33,12 +34,11 @@ public class BountyData extends SavedData {
     ListTag bounties = tag.getList("Bounties", 10);
     for (int i = 0; i < bounties.size(); i++) {
       CompoundTag entry = bounties.getCompound(i);
-      Bounty bounty = new Bounty(entry.getUUID("Id"), entry.getUUID("Target"), entry.getString("TargetName"), entry.getLong("Amount"), entry.getLong("ExpiresAt"));
+      Bounty bounty = new Bounty(entry.getUUID("Id"), entry.getUUID("Target"), entry.getString("TargetName"), entry.getLong("ExpiresAt"));
       bounty.pausedAt(entry.getLong("PausedAt"));
-      ListTag contributions = entry.getList("Contributions", 10);
-      for (int j = 0; j < contributions.size(); j++) {
-        CompoundTag contribution = contributions.getCompound(j);
-        bounty.contributions().put(contribution.getUUID("Player"), contribution.getLong("Amount"));
+      ListTag rewards = entry.getList("Rewards", 10);
+      for (int j = 0; j < rewards.size(); j++) {
+        bounty.loadReward(Bounty.RewardItem.load(rewards.getCompound(j)));
       }
       data.activeByTarget.put(bounty.targetId(), bounty);
     }
@@ -55,17 +55,13 @@ public class BountyData extends SavedData {
       entry.putUUID("Id", bounty.id());
       entry.putUUID("Target", bounty.targetId());
       entry.putString("TargetName", bounty.targetName());
-      entry.putLong("Amount", bounty.amount());
       entry.putLong("ExpiresAt", bounty.expiresAt());
       entry.putLong("PausedAt", bounty.pausedAt());
-      ListTag contributions = new ListTag();
-      for (Map.Entry<UUID, Long> contribution : bounty.contributions().entrySet()) {
-        CompoundTag contributionTag = new CompoundTag();
-        contributionTag.putUUID("Player", contribution.getKey());
-        contributionTag.putLong("Amount", contribution.getValue());
-        contributions.add(contributionTag);
+      ListTag rewards = new ListTag();
+      for (Bounty.RewardItem reward : bounty.rewards()) {
+        rewards.add(reward.save());
       }
-      entry.put("Contributions", contributions);
+      entry.put("Rewards", rewards);
       bounties.add(entry);
     }
     tag.put("Bounties", bounties);
@@ -87,23 +83,54 @@ public class BountyData extends SavedData {
     return activeByTarget.containsKey(targetId);
   }
 
-  public Bounty place(UUID targetId, String targetName, UUID contributorId, long amount, long now) {
-    Bounty bounty = new Bounty(UUID.randomUUID(), targetId, targetName, amount, now + BountyConfig.DURATION_SECONDS.get() * 1000L);
-    bounty.contributions().put(contributorId, amount);
+  public Bounty place(UUID targetId, String targetName, UUID contributorId, java.util.List<ItemStack> rewards, long now) {
+    Bounty bounty = new Bounty(UUID.randomUUID(), targetId, targetName, now + BountyConfig.DURATION_SECONDS.get() * 1000L);
+    for (ItemStack reward : rewards) {
+      bounty.addReward(contributorId, reward);
+    }
     activeByTarget.put(targetId, bounty);
     setDirty();
     return bounty;
   }
 
-  public Bounty place(MinecraftServer server, UUID targetId, String targetName, UUID contributorId, long amount, long now) {
-    Bounty bounty = place(targetId, targetName, contributorId, amount, now);
+  public Bounty place(MinecraftServer server, UUID targetId, String targetName, UUID contributorId, java.util.List<ItemStack> rewards, long now) {
+    Bounty bounty = place(targetId, targetName, contributorId, rewards, now);
     refreshTargetNameplate(server, targetId);
     return bounty;
   }
 
-  public void contribute(Bounty bounty, UUID contributorId, long amount) {
-    bounty.contribute(contributorId, amount);
+  public void contribute(Bounty bounty, UUID contributorId, java.util.List<ItemStack> rewards) {
+    for (ItemStack reward : rewards) {
+      bounty.addReward(contributorId, reward);
+    }
     setDirty();
+  }
+
+  public java.util.List<ItemStack> removeContribution(UUID targetId, UUID contributorId, MinecraftServer server) {
+    Bounty bounty = activeByTarget.get(targetId);
+    if (bounty == null) {
+      return java.util.Collections.emptyList();
+    }
+    java.util.List<ItemStack> removed = bounty.removeContributorRewards(contributorId);
+    if (!removed.isEmpty()) {
+      if (bounty.rewards().isEmpty()) {
+        activeByTarget.remove(targetId);
+        refreshTargetNameplate(server, targetId);
+      }
+      setDirty();
+    }
+    return removed;
+  }
+
+  public java.util.List<ItemStack> startClaim(UUID targetId, UUID bountyId, long now, MinecraftServer server) {
+    Bounty bounty = activeByTarget.get(targetId);
+    if (bounty == null || !bounty.id().equals(bountyId)) {
+      return java.util.Collections.emptyList();
+    }
+    java.util.List<ItemStack> rewards = bounty.rewardStacks();
+    bounty.clearRewards();
+    clearAndCooldown(targetId, now, server);
+    return rewards;
   }
 
   public void clearAndCooldown(UUID targetId, long now) {
@@ -181,25 +208,6 @@ public class BountyData extends SavedData {
       }
       setDirty();
     }
-  }
-
-  public boolean cancelContribution(UUID targetId, UUID contributorId, long now, MinecraftServer server) {
-    Bounty bounty = activeByTarget.get(targetId);
-    if (bounty == null) {
-      return false;
-    }
-    Long contribution = bounty.contributions().remove(contributorId);
-    if (contribution == null || contribution <= 0L) {
-      return false;
-    }
-    long remaining = Math.max(0L, bounty.amount() - contribution);
-    if (remaining <= 0L) {
-      clearAndCooldown(targetId, now, server);
-    } else {
-      bounty.amount(remaining);
-      setDirty();
-    }
-    return true;
   }
 
   private void refreshTargetNameplate(MinecraftServer server, UUID targetId) {

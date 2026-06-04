@@ -14,6 +14,8 @@ public class Clan {
   private UUID leader;
   private long bankBalance;
   private final Set<UUID> coLeaders = new LinkedHashSet<>();
+  private final Set<UUID> lieutenants = new LinkedHashSet<>();
+  private final Set<UUID> officers = new LinkedHashSet<>();
   private final Set<UUID> members = new LinkedHashSet<>();
   private final Set<UUID> allies = new LinkedHashSet<>();
   private final Set<UUID> enemies = new LinkedHashSet<>();
@@ -56,11 +58,19 @@ public class Clan {
   public void setLeader(UUID leader) {
     this.leader = leader;
     members.add(leader);
-    coLeaders.remove(leader);
+    clearAssignedRole(leader);
   }
 
   public Set<UUID> getCoLeaders() {
     return coLeaders;
+  }
+
+  public Set<UUID> getLieutenants() {
+    return lieutenants;
+  }
+
+  public Set<UUID> getOfficers() {
+    return officers;
   }
 
   public Set<UUID> getMembers() {
@@ -105,14 +115,42 @@ public class Clan {
     if (coLeaders.contains(playerId)) {
       return ClanRole.CO_LEADER;
     }
+    if (lieutenants.contains(playerId)) {
+      return ClanRole.LIEUTENANT;
+    }
+    if (officers.contains(playerId)) {
+      return ClanRole.OFFICER;
+    }
     if (members.contains(playerId)) {
       return ClanRole.MEMBER;
     }
     return null;
   }
 
+  public void setRole(UUID playerId, ClanRole role) {
+    if (!members.contains(playerId) || role == null || role == ClanRole.LEADER) {
+      return;
+    }
+    clearAssignedRole(playerId);
+    switch (role) {
+      case CO_LEADER -> coLeaders.add(playerId);
+      case LIEUTENANT -> lieutenants.add(playerId);
+      case OFFICER -> officers.add(playerId);
+      case MEMBER -> {
+      }
+      default -> {
+      }
+    }
+  }
+
+  public void clearAssignedRole(UUID playerId) {
+    coLeaders.remove(playerId);
+    lieutenants.remove(playerId);
+    officers.remove(playerId);
+  }
+
   public boolean canManage(UUID playerId) {
     ClanRole role = roleOf(playerId);
-    return role == ClanRole.LEADER || role == ClanRole.CO_LEADER;
+    return role == ClanRole.LEADER || role == ClanRole.CO_LEADER || role == ClanRole.LIEUTENANT || role == ClanRole.OFFICER;
   }
 }

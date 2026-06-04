@@ -62,7 +62,6 @@ public final class ClientNameplateEvents {
   public static void onRenderLevel(RenderLevelStageEvent event) {
     if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_ENTITIES) return;
     if (!NameplateConfig.ENABLE_CUSTOM_NAMEPLATES.get()) return;
-    if (!NameplateConfig.SHOW_TEAMMATE_ARROW.get()) return;
 
     Minecraft mc = Minecraft.getInstance();
     if (mc.player == null || mc.level == null || mc.gameRenderer == null) return;
@@ -71,6 +70,13 @@ public final class ClientNameplateEvents {
     Vec3 camPos = camera.getPosition();
     PoseStack poseStack = event.getPoseStack();
     MultiBufferSource.BufferSource bufferSource = mc.renderBuffers().bufferSource();
+
+    renderClanRoles(mc, poseStack, bufferSource, camPos, event.getPartialTick());
+
+    if (!NameplateConfig.SHOW_TEAMMATE_ARROW.get()) {
+      bufferSource.endBatch();
+      return;
+    }
 
     double maxDist = ClientClanCache.arrowRenderDistance();
     float scale = NameplateConfig.ARROW_SCALE.get().floatValue();
@@ -107,6 +113,59 @@ public final class ClientNameplateEvents {
     }
 
     bufferSource.endBatch();
+  }
+
+  private static void renderClanRoles(
+          Minecraft mc,
+          PoseStack poseStack,
+          MultiBufferSource.BufferSource bufferSource,
+          Vec3 camPos,
+          float partial
+  ) {
+    var camera = mc.gameRenderer.getMainCamera();
+    double maxDist = ClientClanCache.maxRenderDistance();
+    float scale = 0.025F;
+
+    for (Player target : mc.level.players()) {
+      if (target == mc.player) continue;
+      if (maxDist > 0 && mc.player.distanceToSqr(target) > maxDist * maxDist) continue;
+      if (NameplateConfig.REQUIRE_LINE_OF_SIGHT.get()
+              && !mc.player.hasLineOfSight(target)) continue;
+
+      String roleName = roleDisplay(ClientClanCache.playerRole(target.getUUID()));
+      if (roleName.isBlank()) continue;
+
+      double dx = (target.xo + (target.getX() - target.xo) * partial) - camPos.x;
+      double dy = (target.yo + (target.getY() - target.yo) * partial) - camPos.y;
+      double dz = (target.zo + (target.getZ() - target.zo) * partial) - camPos.z;
+
+      double roleY = dy + target.getBbHeight() + 0.72D;
+      Component role = Component.literal(roleName);
+
+      poseStack.pushPose();
+      poseStack.translate(dx, roleY, dz);
+      poseStack.mulPose(camera.rotation());
+      poseStack.scale(-scale, -scale, scale);
+
+      int halfWidth = mc.font.width(role) / 2;
+      mc.font.drawInBatch(
+              role, -halfWidth, 0, 0xFF0E5C2F, false,
+              poseStack.last().pose(), bufferSource,
+              Font.DisplayMode.NORMAL, 0, LightTexture.FULL_BRIGHT);
+
+      poseStack.popPose();
+    }
+  }
+
+  private static String roleDisplay(String role) {
+    return switch (role) {
+      case "LEADER" -> "Leader";
+      case "CO_LEADER" -> "Co-Leader";
+      case "LIEUTENANT" -> "Lieutenant";
+      case "OFFICER" -> "Officer";
+      case "MEMBER" -> "Member";
+      default -> "";
+    };
   }
 
   // Clear the cache when disconnecting so it doesn't bleed into the next session

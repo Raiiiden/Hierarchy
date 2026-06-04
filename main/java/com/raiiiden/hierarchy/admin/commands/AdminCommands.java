@@ -153,7 +153,7 @@ public final class AdminCommands {
         }
         long seconds = Math.max(0L, (bounty.expiresAt() - now) / 1000L);
         boolean paused = bounty.pausedAt() > 0L;
-        return ok(source, target.getGameProfile().getName() + " bounty: " + bounty.amount()
+        return ok(source, target.getGameProfile().getName() + " bounty: " + bounty.rewards().size() + " reward item(s)"
                 + " | expires in " + seconds + "s"
                 + (paused ? " (paused)" : "")
                 + " | contributors: " + bounty.contributions().size());

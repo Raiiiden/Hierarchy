@@ -7,6 +7,7 @@ import com.raiiiden.hierarchy.clan.combat.PvpDamageDecision;
 import com.raiiiden.hierarchy.clan.combat.PvpRelationship;
 import com.raiiiden.hierarchy.clan.config.ClanCombatConfig;
 import com.raiiiden.hierarchy.clan.model.Clan;
+import com.raiiiden.hierarchy.clan.model.ClanRole;
 import com.raiiiden.hierarchy.clan.model.ClanPair;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -77,6 +78,8 @@ public class ClanData extends SavedData {
       Clan clan = new Clan(clanTag.getUUID("Id"), clanTag.getString("Name"), clanTag.getUUID("Leader"));
       clan.setTag(clanTag.getString("Tag"));
       readUuidSet(clanTag.getList("CoLeaders", 8), clan.getCoLeaders());
+      readUuidSet(clanTag.getList("Lieutenants", 8), clan.getLieutenants());
+      readUuidSet(clanTag.getList("Officers", 8), clan.getOfficers());
       clan.getMembers().clear();
       readUuidSet(clanTag.getList("Members", 8), clan.getMembers());
       readUuidSet(clanTag.getList("Allies", 8), clan.getAllies());
@@ -135,6 +138,8 @@ public class ClanData extends SavedData {
       clanTag.putString("Tag", clan.getTag());
       clanTag.putUUID("Leader", clan.getLeader());
       clanTag.put("CoLeaders", writeUuidSet(clan.getCoLeaders()));
+      clanTag.put("Lieutenants", writeUuidSet(clan.getLieutenants()));
+      clanTag.put("Officers", writeUuidSet(clan.getOfficers()));
       clanTag.put("Members", writeUuidSet(clan.getMembers()));
       clanTag.put("Allies", writeUuidSet(clan.getAllies()));
       clanTag.put("Enemies", writeUuidSet(clan.getEnemies()));
@@ -214,6 +219,7 @@ public class ClanData extends SavedData {
       }
     }
     setDirty();
+    syncClanMembersToAllOnlinePlayers();
     return clan;
   }
 
@@ -267,7 +273,7 @@ public class ClanData extends SavedData {
 
   public void removeMember(Clan clan, UUID playerId) {
     clan.getMembers().remove(playerId);
-    clan.getCoLeaders().remove(playerId);
+    clan.clearAssignedRole(playerId);
     playerClans.remove(playerId);
     clearCombatSnapshots(playerId);
     if (ClanCombatConfig.USE_VANILLA_TEAMS.get() && server != null) {
@@ -650,15 +656,32 @@ public class ClanData extends SavedData {
     if (server == null) return;
     ServerPlayer online = server.getPlayerList().getPlayer(playerId);
     if (online == null) return;
+
     Clan clan = clanOf(playerId).orElse(null);
     java.util.Set<UUID> mates = new java.util.HashSet<>();
+    java.util.Map<UUID, String> roles = new java.util.HashMap<>();
     if (clan != null) {
       for (UUID memberId : clan.getMembers()) {
-        if (!memberId.equals(playerId)) mates.add(memberId);
+        if (!memberId.equals(playerId)) {
+          mates.add(memberId);
+          ClanRole role = clan.roleOf(memberId);
+          if (role != null) roles.put(memberId, role.name());
+        }
       }
     }
+
+    java.util.Map<UUID, String> allRoles = new java.util.HashMap<>();
+    for (ServerPlayer p : server.getPlayerList().getPlayers()) {
+      UUID pid = p.getUUID();
+      Clan pClan = clanOf(pid).orElse(null);
+      if (pClan != null) {
+        ClanRole role = pClan.roleOf(pid);
+        if (role != null) allRoles.put(pid, role.name());
+      }
+    }
+
     com.raiiiden.hierarchy.network.NetworkHandler.CHANNEL.sendTo(
-            new com.raiiiden.hierarchy.network.SyncClanMembersPacket(mates),
+            new com.raiiiden.hierarchy.network.SyncClanMembersPacket(mates, roles, allRoles),
             online.connection.connection,
             net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT);
   }
