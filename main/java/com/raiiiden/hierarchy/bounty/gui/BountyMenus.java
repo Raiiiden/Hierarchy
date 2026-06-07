@@ -54,6 +54,10 @@ public final class BountyMenus {
     }));
   }
 
+  public static void open(ServerPlayer player) {
+    openMain(player);
+  }
+
   public static void openPlayerSelection(ServerPlayer player, boolean activeOnly, int page) {
     BountyData data = BountyData.get(player.server);
     long now = System.currentTimeMillis();

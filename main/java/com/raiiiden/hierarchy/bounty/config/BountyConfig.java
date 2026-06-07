@@ -6,6 +6,8 @@ public final class BountyConfig {
   public static final ForgeConfigSpec SPEC;
   public static final ForgeConfigSpec.BooleanValue ENABLE_BOUNTIES;
   public static final ForgeConfigSpec.BooleanValue ENABLE_DOG_TAGS;
+  public static final ForgeConfigSpec.ConfigValue<String> ACCESS_MODE;
+  public static final ForgeConfigSpec.ConfigValue<String> NPC_ONLY_BLOCKED_MESSAGE;
   public static final ForgeConfigSpec.DoubleValue TAX_PERCENT;
   public static final ForgeConfigSpec.LongValue DURATION_SECONDS;
   public static final ForgeConfigSpec.LongValue COOLDOWN_SECONDS;
@@ -26,6 +28,16 @@ public final class BountyConfig {
     builder.push("bounties");
     ENABLE_BOUNTIES = builder.define("enableBounties", true);
     ENABLE_DOG_TAGS = builder.define("enableDogTags", true);
+    ACCESS_MODE = builder
+            .comment("Controls how players access the bounty board.",
+                    "ANYWHERE  - /bounty commands work normally (default).",
+                    "NPC_ONLY  - /bounty place/contribute/list/info are blocked; players must use a Bounty NPC.",
+                    "           /bounty redeem always works regardless of this setting.",
+                    "           Use /hierarchy openbounty <player> from an NPC or command block to open the GUI.")
+            .define("accessMode", "ANYWHERE");
+    NPC_ONLY_BLOCKED_MESSAGE = builder
+            .comment("Message shown when a player uses a blocked /bounty command in NPC_ONLY mode.")
+            .define("npcOnlyBlockedMessage", "Visit a Bounty NPC.");
     TAX_PERCENT = builder.defineInRange("taxPercent", 0.0D, 0.0D, 100.0D);
     DURATION_SECONDS = builder.defineInRange("bountyDurationSeconds", 86400L, 1L, 31536000L);
     COOLDOWN_SECONDS = builder.defineInRange("postBountyCooldownSeconds", 3600L, 0L, 31536000L);
@@ -49,5 +61,8 @@ public final class BountyConfig {
   }
 
   private BountyConfig() {
+  }
+  public static boolean isNpcOnly() {
+    return "NPC_ONLY".equalsIgnoreCase(ACCESS_MODE.get().trim());
   }
 }

@@ -19,42 +19,55 @@ public final class BountyCommands {
 
   public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
     dispatcher.register(Commands.literal("bounty")
-        .requires(source -> BountyConfig.ENABLE_BOUNTIES.get())
-        .executes(ctx -> openMain(ctx.getSource(), player(ctx.getSource())))
-        .then(Commands.literal("list").executes(ctx -> openList(ctx.getSource())))
-        .then(Commands.literal("info").then(Commands.argument("target", EntityArgument.player()).executes(ctx -> info(ctx.getSource(), EntityArgument.getPlayer(ctx, "target")))))
-        .then(Commands.literal("place")
-            .requires(source -> source.getEntity() instanceof ServerPlayer)
-            .executes(ctx -> openPlace(ctx.getSource(), player(ctx.getSource()))))
-        .then(Commands.literal("contribute")
-            .requires(source -> source.getEntity() instanceof ServerPlayer)
-            .executes(ctx -> openContribute(ctx.getSource(), player(ctx.getSource()))))
-        .then(Commands.literal("redeem")
-            .requires(source -> source.getEntity() instanceof ServerPlayer)
-            .executes(ctx -> openRedeem(ctx.getSource(), player(ctx.getSource())))));
+            .requires(source -> BountyConfig.ENABLE_BOUNTIES.get())
+            .executes(ctx -> openMain(ctx.getSource(), player(ctx.getSource())))
+            .then(Commands.literal("list").executes(ctx -> openList(ctx.getSource())))
+            .then(Commands.literal("info").then(Commands.argument("target", EntityArgument.player()).executes(ctx -> info(ctx.getSource(), EntityArgument.getPlayer(ctx, "target")))))
+            .then(Commands.literal("place")
+                    .requires(source -> source.getEntity() instanceof ServerPlayer)
+                    .executes(ctx -> openPlace(ctx.getSource(), player(ctx.getSource()))))
+            .then(Commands.literal("contribute")
+                    .requires(source -> source.getEntity() instanceof ServerPlayer)
+                    .executes(ctx -> openContribute(ctx.getSource(), player(ctx.getSource()))))
+            .then(Commands.literal("redeem")
+                    .requires(source -> source.getEntity() instanceof ServerPlayer)
+                    .executes(ctx -> openRedeem(ctx.getSource(), player(ctx.getSource())))));
   }
 
+  // -------------------------------------------------------------------------
+  // Command handlers
+  // -------------------------------------------------------------------------
+
+  // /bounty — opens the main bounty board. Blocked in NPC_ONLY mode.
   private static int openMain(CommandSourceStack source, ServerPlayer player) {
-    BountyMenus.openMain(player);
+    if (!accessAllowed(source)) return 0;
+    BountyMenus.open(player);
     return 1;
   }
 
+  // /bounty place — opens player-selection for placing a new bounty. Blocked in NPC_ONLY mode.
   private static int openPlace(CommandSourceStack source, ServerPlayer player) {
+    if (!accessAllowed(source)) return 0;
     BountyMenus.openPlayerSelection(player, false, 0);
     return 1;
   }
 
+  // /bounty contribute — opens player-selection for contributing to an existing bounty. Blocked in NPC_ONLY mode.
   private static int openContribute(CommandSourceStack source, ServerPlayer player) {
+    if (!accessAllowed(source)) return 0;
     BountyMenus.openPlayerSelection(player, true, 0);
     return 1;
   }
 
+  // /bounty redeem — always allowed regardless of access mode. */
   private static int openRedeem(CommandSourceStack source, ServerPlayer player) {
     BountyMenus.openRedemption(player);
     return 1;
   }
 
+  // /bounty list — opens the active-bounty board (or prints to console). Blocked in NPC_ONLY mode.
   private static int openList(CommandSourceStack source) {
+    if (!accessAllowed(source)) return 0;
     if (source.getEntity() instanceof ServerPlayer player) {
       BountyMenus.openActiveBoard(player, 0);
       return 1;
@@ -62,7 +75,9 @@ public final class BountyCommands {
     return list(source);
   }
 
+  // /bounty info <target> — prints bounty info as chat. Blocked in NPC_ONLY mode.
   private static int info(CommandSourceStack source, ServerPlayer target) {
+    if (!accessAllowed(source)) return 0;
     long now = System.currentTimeMillis();
     BountyData data = BountyData.get(source.getServer());
     data.expireIfNeeded(target.getUUID(), now, source.getServer());
@@ -74,13 +89,29 @@ public final class BountyCommands {
     return ok(source, bounty.targetName() + " bounty: " + bounty.rewards().size() + " reward item(s) (" + seconds + "s remaining).");
   }
 
+  // -------------------------------------------------------------------------
+  // Internal helpers
+  // -------------------------------------------------------------------------
+
+  /**
+   * Returns true if the command source is allowed to access the bounty board via commands.
+   * In NPC_ONLY mode, all commands except /bounty redeem are blocked and this returns false.
+   */
+  private static boolean accessAllowed(CommandSourceStack source) {
+    if (BountyConfig.isNpcOnly()) {
+      source.sendFailure(Component.literal(BountyConfig.NPC_ONLY_BLOCKED_MESSAGE.get()));
+      return false;
+    }
+    return true;
+  }
+
   private static int list(CommandSourceStack source) {
     BountyData data = BountyData.get(source.getServer());
     data.expireAll(System.currentTimeMillis(), source.getServer());
     String bounties = data.activeBounties().stream()
-        .sorted(Comparator.comparing(Bounty::targetName, String.CASE_INSENSITIVE_ORDER))
-        .map(bounty -> bounty.targetName() + " (" + bounty.rewards().size() + " items)")
-        .collect(Collectors.joining(", "));
+            .sorted(Comparator.comparing(Bounty::targetName, String.CASE_INSENSITIVE_ORDER))
+            .map(bounty -> bounty.targetName() + " (" + bounty.rewards().size() + " items)")
+            .collect(Collectors.joining(", "));
     return ok(source, bounties.isBlank() ? "No active bounties." : "Bounties: " + bounties);
   }
 

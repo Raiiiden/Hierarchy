@@ -2,7 +2,9 @@ package com.raiiiden.hierarchy.admin.commands;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
+import com.raiiiden.hierarchy.bounty.config.BountyConfig;
 import com.raiiiden.hierarchy.bounty.data.BountyData;
+import com.raiiiden.hierarchy.bounty.gui.BountyMenus;
 import com.raiiiden.hierarchy.bounty.model.Bounty;
 import com.raiiiden.hierarchy.clan.data.ClanData;
 import com.raiiiden.hierarchy.clan.model.Clan;
@@ -68,8 +70,6 @@ public final class AdminCommands {
                                         .executes(ctx -> clanInfo(ctx.getSource(),
                                                 EntityArgument.getPlayer(ctx, "player")))))
                         .then(Commands.literal("clearpvpdelays")
-                                .executes(ctx -> clearPvpDelays(ctx.getSource())))
-                        .then(Commands.literal("clearpvpdelays")
                                 .executes(ctx -> clearPvpDelays(ctx.getSource()))
                                 .then(Commands.argument("player", EntityArgument.player())
                                         .executes(ctx -> clearPvpDelaysForPlayer(ctx.getSource(),
@@ -81,12 +81,30 @@ public final class AdminCommands {
                         .then(Commands.literal("resync")
                                 .executes(ctx -> clanResync(ctx.getSource()))))
 
+                // Open bounty board GUI for a target player (for NPC / command-block integration)
+                .then(Commands.literal("openbounty")
+                        .then(Commands.argument("player", EntityArgument.player())
+                                .executes(ctx -> openBountyGui(ctx.getSource(),
+                                        EntityArgument.getPlayer(ctx, "player")))))
+
                 // Wipe commands
                 .then(Commands.literal("wipe")
                         .then(Commands.literal("bounties")
                                 .executes(ctx -> wipeBounties(ctx.getSource())))
                         .then(Commands.literal("humanity")
                                 .executes(ctx -> wipeHumanity(ctx.getSource())))));
+
+        // Also register /hierarchy openbounty <player> as a shorter root command.
+        // This is the form recommended for EasyNPC / CustomNPCs / FTB Quests / command blocks
+        // where a concise, readable command matters:
+        //   e.g.  /hierarchy openbounty %player%
+        // Requires op level 2, same as /hierarchyadmin.
+        dispatcher.register(Commands.literal("hierarchy")
+                .requires(source -> source.hasPermission(2))
+                .then(Commands.literal("openbounty")
+                        .then(Commands.argument("player", EntityArgument.player())
+                                .executes(ctx -> openBountyGui(ctx.getSource(),
+                                        EntityArgument.getPlayer(ctx, "player"))))));
     }
 
     // --- Humanity ---
@@ -159,6 +177,22 @@ public final class AdminCommands {
                 + " | contributors: " + bounty.contributions().size());
     }
 
+    /**
+     * Opens the bounty board GUI for the target player.
+     * This is the NPC/command-block integration point.
+     *
+     * Examples:
+     *   /hierarchyadmin openbounty SomePlayer
+     *   /hierarchy openbounty %player%   (EasyNPC, FTB Quests, command blocks)
+     */
+    private static int openBountyGui(CommandSourceStack source, ServerPlayer target) {
+        if (!BountyConfig.ENABLE_BOUNTIES.get()) {
+            return fail(source, "Bounties are disabled.");
+        }
+        BountyMenus.open(target);
+        return ok(source, "Opened bounty board for " + target.getGameProfile().getName() + ".");
+    }
+
     // --- Clan ---
 
     private static int clanDisband(CommandSourceStack source, ServerPlayer target) {
@@ -193,10 +227,7 @@ public final class AdminCommands {
 
     private static int clearPvpDelaysForPlayer(CommandSourceStack source, ServerPlayer target) {
         ClanData data = ClanData.get(source.getServer());
-        // Clear snapshots involving this player
         data.clearCombatSnapshots(target.getUUID());
-        // Clear their personal clan delays
-        // Needs a new method on ClanData since playerClanPvpDelayUntil is private
         data.clearPlayerPvpDelays(target.getUUID());
         return ok(source, "Cleared PvP delays for " + target.getGameProfile().getName() + ".");
     }
