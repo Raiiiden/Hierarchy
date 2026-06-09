@@ -13,6 +13,10 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class ClientClanCache {
     private ClientClanCache() {}
 
+    // -------------------------------------------------------------------------
+    // Clan
+    // -------------------------------------------------------------------------
+
     private static final Set<UUID> clanmates =
             Collections.newSetFromMap(new ConcurrentHashMap<>());
     private static final Map<UUID, String> clanmateRoles = new ConcurrentHashMap<>();
@@ -73,12 +77,44 @@ public final class ClientClanCache {
                 : NameplateConfig.ARROW_RENDER_DISTANCE_BLOCKS.get();
     }
 
+    // -------------------------------------------------------------------------
+    // Party
+    // -------------------------------------------------------------------------
+
+    private static final Set<UUID> partymates =
+            Collections.newSetFromMap(new ConcurrentHashMap<>());
+    private static volatile UUID partyLeaderId = null;
+
+    public static void setPartymates(Set<UUID> ids, UUID leaderId) {
+        partymates.clear();
+        partymates.addAll(ids);
+        partyLeaderId = leaderId;
+    }
+
+    // Returns true if the given UUID belongs to a party member of the local player.
+    public static boolean isPartymate(UUID id) {
+        return partymates.contains(id);
+    }
+
+    public static UUID partyLeaderId() {
+        return partyLeaderId;
+    }
+
+    // -------------------------------------------------------------------------
+    // Lifecycle
+    // -------------------------------------------------------------------------
+
+    // Clear all caches on disconnect so they do not bleed into the next session
     public static void clear() {
+        // Clan
         clanmates.clear();
         clanmateRoles.clear();
         allPlayerRoles.clear();
         syncedMaxRender      = -1;
         syncedTeammateRender = -1;
         syncedArrowRender    = -1;
+        // Party
+        partymates.clear();
+        partyLeaderId = null;
     }
 }

@@ -34,5 +34,12 @@ public final class NetworkHandler {
                 SyncNameplateConfigPacket::decode,
                 SyncNameplateConfigPacket::handle,
                 Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+
+        CHANNEL.registerMessage(nextId++,
+                SyncPartyMembersPacket.class,
+                SyncPartyMembersPacket::encode,
+                SyncPartyMembersPacket::decode,
+                SyncPartyMembersPacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_CLIENT));
     }
 }
