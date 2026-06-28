@@ -12,6 +12,7 @@ public final class ClanCombatConfig {
   public static final ForgeConfigSpec.BooleanValue USE_VANILLA_TEAMS;
   public static final ForgeConfigSpec.BooleanValue ENABLE_FRIENDLY_FIRE_SYSTEM;
   public static final ForgeConfigSpec.LongValue PVP_DELAY_SECONDS;
+  public static final ForgeConfigSpec.LongValue INVITE_EXPIRY_HOURS;
   public static final ForgeConfigSpec.BooleanValue ENABLE_RELATIONSHIP_SNAPSHOTS;
   public static final ForgeConfigSpec.BooleanValue ENABLE_NOTIFICATIONS;
   public static final ForgeConfigSpec.BooleanValue HANDLE_EXPLOSIONS;
@@ -106,6 +107,9 @@ public final class ClanCombatConfig {
     PVP_DELAY_SECONDS = builder
         .comment("Seconds before PvP counts after leaving a clan, being kicked, unallying, or revoking friendly fire.")
         .defineInRange("pvpDelaySeconds", 300L, 0L, 604800L);
+    INVITE_EXPIRY_HOURS = builder
+        .comment("Hours before a pending clan invite expires (real time).")
+        .defineInRange("inviteExpiryHours", 24L, 1L, 8760L);
     ENABLE_RELATIONSHIP_SNAPSHOTS = builder
         .comment("Snapshot clan relationships on the first damage event in a combat exchange.")
         .define("enableRelationshipSnapshots", true);

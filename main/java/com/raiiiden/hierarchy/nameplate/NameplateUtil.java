@@ -39,7 +39,16 @@ public final class NameplateUtil {
       target.setCustomNameVisible(false);
       return;
     }
-    // Mark visible server-side so vanilla spawn packets are correct
+    // Set the canonical custom name ON the entity so it lives in the entity's
+    // synched data and travels with vanilla entity tracking. This is what makes
+    // the nameplate survive death/respawn and dimension changes: the per-viewer
+    // override packets (below) are keyed to the entity's network id, so when the
+    // player entity is destroyed and recreated they can race the new entity's
+    // spawn packet and get dropped — leaving the client to fall back to the plain
+    // name. The canonical name is resent automatically as part of the entity's
+    // metadata, so the plate is never lost.
+    target.setCustomName(build(target.server, target.getUUID(),
+            target.getGameProfile().getName(), null));
     target.setCustomNameVisible(true);
     // Push a per-viewer colored name to every currently online player
     for (ServerPlayer viewer : target.server.getPlayerList().getPlayers()) {
@@ -85,6 +94,9 @@ public final class NameplateUtil {
         target.setCustomNameVisible(false);
         continue;
       }
+      // Canonical name on the entity — survives respawn/re-tracking (see refresh()).
+      target.setCustomName(build(target.server, target.getUUID(),
+              target.getGameProfile().getName(), null));
       target.setCustomNameVisible(true);
       for (ServerPlayer viewer : players) {
         if (viewer == target) continue;

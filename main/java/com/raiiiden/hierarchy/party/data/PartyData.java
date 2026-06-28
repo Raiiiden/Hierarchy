@@ -4,6 +4,7 @@ import com.raiiiden.hierarchy.party.model.Party;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
@@ -18,8 +19,10 @@ public class PartyData extends SavedData {
     private final Map<UUID, Party> parties = new LinkedHashMap<>();
     // playerId → partyId
     private final Map<UUID, UUID> playerParty = new HashMap<>();
-    // inviteeId → partyId
-    private final Map<UUID, UUID> pendingInvites = new HashMap<>();
+    // inviteeId → pending invite (which party, and when it was sent)
+    private final Map<UUID, PendingInvite> pendingInvites = new HashMap<>();
+
+    private record PendingInvite(UUID partyId, long createdAt) {}
 
     private MinecraftServer server;
 
@@ -57,9 +60,10 @@ public class PartyData extends SavedData {
             CompoundTag entry = inviteTags.getCompound(i);
             UUID inviteeId = entry.getUUID("Player");
             UUID partyId = entry.getUUID("Party");
+            long createdAt = entry.getLong("CreatedAt");
             // Only restore invites for parties that survived the load check above
             if (data.parties.containsKey(partyId)) {
-                data.pendingInvites.put(inviteeId, partyId);
+                data.pendingInvites.put(inviteeId, new PendingInvite(partyId, createdAt));
             }
         }
         return data;
@@ -83,11 +87,13 @@ public class PartyData extends SavedData {
         }
         tag.put("Parties", partyTags);
         ListTag inviteTags = new ListTag();
-        for (Map.Entry<UUID, UUID> entry : pendingInvites.entrySet()) {
-            if (!parties.containsKey(entry.getValue())) continue;
+        for (Map.Entry<UUID, PendingInvite> entry : pendingInvites.entrySet()) {
+            PendingInvite invite = entry.getValue();
+            if (!parties.containsKey(invite.partyId())) continue;
             CompoundTag inviteTag = new CompoundTag();
             inviteTag.putUUID("Player", entry.getKey());
-            inviteTag.putUUID("Party", entry.getValue());
+            inviteTag.putUUID("Party", invite.partyId());
+            inviteTag.putLong("CreatedAt", invite.createdAt());
             inviteTags.add(inviteTag);
         }
         tag.put("PendingInvites", inviteTags);
@@ -113,13 +119,54 @@ public class PartyData extends SavedData {
         return partyIdA.equals(playerParty.get(b));
     }
 
+    private static long inviteTtlMillis() {
+        return com.raiiiden.hierarchy.party.config.PartyConfig.INVITE_EXPIRY_SECONDS.get() * 1000L;
+    }
+
     public boolean hasPendingInvite(UUID playerId) {
-        return pendingInvites.containsKey(playerId);
+        return livePendingInvite(playerId).isPresent();
     }
 
     public Optional<Party> pendingInvite(UUID playerId) {
-        UUID partyId = pendingInvites.get(playerId);
-        return partyId == null ? Optional.empty() : Optional.ofNullable(parties.get(partyId));
+        return livePendingInvite(playerId).map(invite -> parties.get(invite.partyId()));
+    }
+
+    /** Absolute time (millis) the player's invite expires, or 0 if they have none. */
+    public long pendingInviteExpiresAt(UUID playerId) {
+        return livePendingInvite(playerId)
+                .map(invite -> invite.createdAt() + inviteTtlMillis())
+                .orElse(0L);
+    }
+
+    /**
+     * Returns the player's pending invite if it is still valid, dropping it first
+     * when it has expired or its party no longer exists.
+     */
+    private Optional<PendingInvite> livePendingInvite(UUID playerId) {
+        PendingInvite invite = pendingInvites.get(playerId);
+        if (invite == null) {
+            return Optional.empty();
+        }
+        boolean expired = System.currentTimeMillis() - invite.createdAt() > inviteTtlMillis();
+        if (expired || !parties.containsKey(invite.partyId())) {
+            pendingInvites.remove(playerId);
+            setDirty();
+            if (expired && server != null) {
+                ServerPlayer online = server.getPlayerList().getPlayer(playerId);
+                if (online != null) {
+                    online.sendSystemMessage(Component.literal("Your party invitation has expired."));
+                }
+            }
+            return Optional.empty();
+        }
+        return Optional.of(invite);
+    }
+
+    /** Sweeps every player's invite, removing expired/orphaned entries. */
+    public void purgeExpiredInvites() {
+        for (UUID playerId : new ArrayList<>(pendingInvites.keySet())) {
+            livePendingInvite(playerId);
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -138,7 +185,7 @@ public class PartyData extends SavedData {
         for (UUID memberId : new ArrayList<>(party.getMembers())) {
             playerParty.remove(memberId);
         }
-        pendingInvites.values().removeIf(party.getId()::equals);
+        pendingInvites.values().removeIf(invite -> invite.partyId().equals(party.getId()));
         parties.remove(party.getId());
         setDirty();
     }
@@ -162,7 +209,7 @@ public class PartyData extends SavedData {
         playerParty.remove(playerId);
         if (party.getMembers().isEmpty()) {
             parties.remove(party.getId());
-            pendingInvites.values().removeIf(party.getId()::equals);
+            pendingInvites.values().removeIf(invite -> invite.partyId().equals(party.getId()));
             setDirty();
             return false;
         }
@@ -176,7 +223,7 @@ public class PartyData extends SavedData {
     }
 
     public void invite(UUID inviteeId, UUID partyId) {
-        pendingInvites.put(inviteeId, partyId);
+        pendingInvites.put(inviteeId, new PendingInvite(partyId, System.currentTimeMillis()));
         setDirty();
     }
 

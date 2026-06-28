@@ -11,6 +11,7 @@ public class Clan {
   private final UUID id;
   private String name;
   private String tag = "";
+  private String description = "";
   private UUID leader;
   private long bankBalance;
   private final Set<UUID> coLeaders = new LinkedHashSet<>();
@@ -49,6 +50,14 @@ public class Clan {
 
   public void setTag(String tag) {
     this.tag = tag == null ? "" : tag;
+  }
+
+  public String getDescription() {
+    return description;
+  }
+
+  public void setDescription(String description) {
+    this.description = description == null ? "" : description;
   }
 
   public UUID getLeader() {

@@ -21,15 +21,16 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import com.raiiiden.hierarchy.nameplate.TabListManager;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
-import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
@@ -40,39 +41,94 @@ public final class ClanCommands {
   private ClanCommands() {
   }
 
+  // Leaders must confirm a disband within this window after the initial command.
+  private static final long DISBAND_CONFIRM_WINDOW_MILLIS = 30_000L;
+  private static final Map<UUID, Long> pendingDisband = new ConcurrentHashMap<>();
+
+  /** Drops a player's armed disband confirmation (e.g. when they log out). */
+  public static void clearPendingDisband(UUID playerId) {
+    pendingDisband.remove(playerId);
+  }
+
   public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
     dispatcher.register(Commands.literal("clan")
         .requires(source -> source.getEntity() instanceof ServerPlayer && ClanCombatConfig.ENABLE_CLANS.get())
+        .executes(ctx -> info(ctx.getSource()))
+        .then(Commands.literal("help").executes(ctx -> help(ctx.getSource())))
             .then(Commands.literal("create")
                     .then(Commands.argument("name", StringArgumentType.word())
                             .then(Commands.argument("tag", StringArgumentType.word())
                                     .executes(ctx -> create(ctx.getSource(),
                                             StringArgumentType.getString(ctx, "name"),
                                             StringArgumentType.getString(ctx, "tag"))))))
-        .then(Commands.literal("disband").executes(ctx -> disband(ctx.getSource())))
+        .then(Commands.literal("disband")
+            .executes(ctx -> disband(ctx.getSource()))
+            .then(Commands.literal("confirm").executes(ctx -> disbandConfirm(ctx.getSource()))))
         .then(Commands.literal("info").executes(ctx -> info(ctx.getSource())))
         .then(Commands.literal("list").executes(ctx -> list(ctx.getSource())))
-        .then(Commands.literal("invite").then(Commands.argument("player", EntityArgument.player()).executes(ctx -> invite(ctx.getSource(), EntityArgument.getPlayer(ctx, "player")))))
-        .then(Commands.literal("accept").executes(ctx -> accept(ctx.getSource())))
-        .then(Commands.literal("deny").executes(ctx -> deny(ctx.getSource())))
-        .then(Commands.literal("kick").then(Commands.argument("player", StringArgumentType.word()).executes(ctx -> kick(ctx.getSource(), StringArgumentType.getString(ctx, "player")))))
+        .then(Commands.literal("invite").then(Commands.argument("player", StringArgumentType.word())
+            .suggests((ctx, builder) -> suggestInvitablePlayers(ctx.getSource(), builder))
+            .executes(ctx -> invite(ctx.getSource(), StringArgumentType.getString(ctx, "player")))))
+        .then(Commands.literal("invites").executes(ctx -> invites(ctx.getSource())))
+        .then(Commands.literal("accept")
+            .executes(ctx -> accept(ctx.getSource(), null))
+            .then(Commands.argument("clan", StringArgumentType.word())
+                .suggests((ctx, builder) -> suggestPendingInvites(ctx.getSource(), builder))
+                .executes(ctx -> accept(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
+        .then(Commands.literal("deny")
+            .executes(ctx -> deny(ctx.getSource(), null))
+            .then(Commands.argument("clan", StringArgumentType.word())
+                .suggests((ctx, builder) -> suggestPendingInvites(ctx.getSource(), builder))
+                .executes(ctx -> deny(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
+        .then(Commands.literal("kick").then(Commands.argument("player", StringArgumentType.word())
+            .suggests((ctx, builder) -> suggestClanMembers(ctx.getSource(), builder))
+            .executes(ctx -> kick(ctx.getSource(), StringArgumentType.getString(ctx, "player")))))
         .then(Commands.literal("leave").executes(ctx -> leave(ctx.getSource())))
-        .then(Commands.literal("promote").then(Commands.argument("player", StringArgumentType.word()).executes(ctx -> promote(ctx.getSource(), StringArgumentType.getString(ctx, "player")))))
-        .then(Commands.literal("demote").then(Commands.argument("player", StringArgumentType.word()).executes(ctx -> demote(ctx.getSource(), StringArgumentType.getString(ctx, "player")))))
-        .then(Commands.literal("transfer").then(Commands.argument("player", StringArgumentType.word()).executes(ctx -> transfer(ctx.getSource(), StringArgumentType.getString(ctx, "player")))))
+        .then(Commands.literal("promote").then(Commands.argument("player", StringArgumentType.word())
+            .suggests((ctx, builder) -> suggestClanMembers(ctx.getSource(), builder))
+            .executes(ctx -> promote(ctx.getSource(), StringArgumentType.getString(ctx, "player")))))
+        .then(Commands.literal("demote").then(Commands.argument("player", StringArgumentType.word())
+            .suggests((ctx, builder) -> suggestClanMembers(ctx.getSource(), builder))
+            .executes(ctx -> demote(ctx.getSource(), StringArgumentType.getString(ctx, "player")))))
+        .then(Commands.literal("transfer").then(Commands.argument("player", StringArgumentType.word())
+            .suggests((ctx, builder) -> suggestClanMembers(ctx.getSource(), builder))
+            .executes(ctx -> transfer(ctx.getSource(), StringArgumentType.getString(ctx, "player")))))
         .then(Commands.literal("tag").then(Commands.argument("tag", StringArgumentType.word()).executes(ctx -> tag(ctx.getSource(), StringArgumentType.getString(ctx, "tag")))))
+        .then(Commands.literal("desc")
+            .executes(ctx -> describe(ctx.getSource(), ""))
+            .then(Commands.argument("text", StringArgumentType.greedyString()).executes(ctx -> describe(ctx.getSource(), StringArgumentType.getString(ctx, "text")))))
         .then(Commands.literal("ally")
-            .then(Commands.literal("accept").then(Commands.argument("clan", StringArgumentType.word()).executes(ctx -> allyAccept(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
-            .then(Commands.literal("deny").then(Commands.argument("clan", StringArgumentType.word()).executes(ctx -> allyDeny(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
-            .then(Commands.argument("clan", StringArgumentType.word()).executes(ctx -> ally(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
-        .then(Commands.literal("unally").then(Commands.argument("clan", StringArgumentType.word()).executes(ctx -> unally(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
-        .then(Commands.literal("enemy").then(Commands.argument("clan", StringArgumentType.word()).executes(ctx -> enemy(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
-        .then(Commands.literal("neutral").then(Commands.argument("clan", StringArgumentType.word()).executes(ctx -> neutral(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
+            .then(Commands.literal("accept").then(Commands.argument("clan", StringArgumentType.word())
+                .suggests((ctx, builder) -> suggestIncomingAllianceRequests(ctx.getSource(), builder))
+                .executes(ctx -> allyAccept(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
+            .then(Commands.literal("deny").then(Commands.argument("clan", StringArgumentType.word())
+                .suggests((ctx, builder) -> suggestIncomingAllianceRequests(ctx.getSource(), builder))
+                .executes(ctx -> allyDeny(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
+            .then(Commands.argument("clan", StringArgumentType.word())
+                .suggests((ctx, builder) -> suggestOtherClans(ctx.getSource(), builder))
+                .executes(ctx -> ally(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
+        .then(Commands.literal("unally").then(Commands.argument("clan", StringArgumentType.word())
+            .suggests((ctx, builder) -> suggestAllies(ctx.getSource(), builder))
+            .executes(ctx -> unally(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
+        .then(Commands.literal("enemy").then(Commands.argument("clan", StringArgumentType.word())
+            .suggests((ctx, builder) -> suggestOtherClans(ctx.getSource(), builder))
+            .executes(ctx -> enemy(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
+        .then(Commands.literal("neutral").then(Commands.argument("clan", StringArgumentType.word())
+            .suggests((ctx, builder) -> suggestEnemies(ctx.getSource(), builder))
+            .executes(ctx -> neutral(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
             .then(Commands.literal("ff")
-                    .then(Commands.literal("request").then(Commands.argument("clan", StringArgumentType.word()).executes(ctx -> ffRequest(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
-                    .then(Commands.literal("accept").then(Commands.argument("clan", StringArgumentType.word()).executes(ctx -> ffAccept(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
-                    .then(Commands.literal("deny").then(Commands.argument("clan", StringArgumentType.word()).executes(ctx -> ffDeny(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
-                    .then(Commands.literal("revoke").then(Commands.argument("clan", StringArgumentType.word()).executes(ctx -> ffRevoke(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
+                    .then(Commands.literal("request").then(Commands.argument("clan", StringArgumentType.word())
+                        .suggests((ctx, builder) -> suggestAllies(ctx.getSource(), builder))
+                        .executes(ctx -> ffRequest(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
+                    .then(Commands.literal("accept").then(Commands.argument("clan", StringArgumentType.word())
+                        .suggests((ctx, builder) -> suggestIncomingFfRequests(ctx.getSource(), builder))
+                        .executes(ctx -> ffAccept(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
+                    .then(Commands.literal("deny").then(Commands.argument("clan", StringArgumentType.word())
+                        .suggests((ctx, builder) -> suggestIncomingFfRequests(ctx.getSource(), builder))
+                        .executes(ctx -> ffDeny(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
+                    .then(Commands.literal("revoke").then(Commands.argument("clan", StringArgumentType.word())
+                        .suggests((ctx, builder) -> suggestAllies(ctx.getSource(), builder))
+                        .executes(ctx -> ffRevoke(ctx.getSource(), StringArgumentType.getString(ctx, "clan")))))
                     .then(Commands.literal("on").executes(ctx -> ffSelfOn(ctx.getSource())))
                     .then(Commands.literal("off").executes(ctx -> ffSelfOff(ctx.getSource()))))  // <-- ff closes here, after on/off
         .then(Commands.literal("bank")
@@ -84,7 +140,43 @@ public final class ClanCommands {
                 .then(Commands.argument("page", IntegerArgumentType.integer(1)).executes(ctx -> bankTransactions(ctx.getSource(), IntegerArgumentType.getInteger(ctx, "page"))))))
         .then(Commands.literal("members").executes(ctx -> members(ctx.getSource())))
         .then(Commands.literal("allies").executes(ctx -> allies(ctx.getSource())))
-        .then(Commands.literal("role").then(Commands.argument("player", StringArgumentType.word()).executes(ctx -> role(ctx.getSource(), StringArgumentType.getString(ctx, "player"))))));
+        .then(Commands.literal("role").then(Commands.argument("player", StringArgumentType.word())
+            .suggests((ctx, builder) -> suggestClanMembers(ctx.getSource(), builder))
+            .executes(ctx -> role(ctx.getSource(), StringArgumentType.getString(ctx, "player"))))));
+  }
+
+  private static int help(CommandSourceStack source) {
+    source.sendSuccess(() -> Component.literal("Clan commands:").withStyle(ChatFormatting.GOLD), false);
+    String[][] entries = {
+        {"/clan", "Show your clan info"},
+        {"/clan create <name> <tag>", "Found a new clan"},
+        {"/clan invite <player>", "Invite a player"},
+        {"/clan invites", "Show your pending invites"},
+        {"/clan accept [clan]", "Accept an invite"},
+        {"/clan deny [clan]", "Decline an invite"},
+        {"/clan leave", "Leave your clan"},
+        {"/clan members", "List clan members"},
+        {"/clan promote <player>", "Promote a member one rank"},
+        {"/clan demote <player>", "Demote a member one rank"},
+        {"/clan kick <player>", "Remove a member"},
+        {"/clan transfer <player>", "Hand over leadership (leader only)"},
+        {"/clan tag <tag>", "Change the clan tag"},
+        {"/clan desc <text>", "Set the clan description"},
+        {"/clan ally <clan>", "Request/accept an alliance"},
+        {"/clan unally <clan>", "End an alliance"},
+        {"/clan enemy <clan>", "Mark a clan as an enemy"},
+        {"/clan neutral <clan>", "Clear enemy status"},
+        {"/clan ff <...>", "Friendly-fire requests with allies"},
+        {"/clan bank <...>", "Clan bank deposit/withdraw/log"},
+        {"/clan list", "List all clans"},
+        {"/clan allies", "List your allies"},
+        {"/clan disband", "Disband your clan (leader only)"},
+    };
+    for (String[] entry : entries) {
+      source.sendSuccess(() -> Component.literal(entry[0]).withStyle(ChatFormatting.YELLOW)
+              .append(Component.literal(" — " + entry[1]).withStyle(ChatFormatting.GRAY)), false);
+    }
+    return 1;
   }
 
   private static int create(CommandSourceStack source, String name, String tag) {
@@ -109,12 +201,12 @@ public final class ClanCommands {
     Clan clan = data.createClan(name, player.getUUID());
     clan.setTag(tag.toUpperCase(java.util.Locale.ROOT));
     data.setDirty();
-    NameplateUtil.refresh(player);
     TabListManager.refreshAll(source.getServer());
     NameplateUtil.refresh(player);
     return ok(source, "Created clan " + name + " [" + clan.getTag() + "].");
   }
 
+  // /clan disband — leader only; arms a confirmation rather than disbanding immediately.
   private static int disband(CommandSourceStack source) {
     ServerPlayer player = player(source);
     ClanData data = data(source);
@@ -123,17 +215,42 @@ public final class ClanCommands {
       return 0;
     }
     if (!clan.getLeader().equals(player.getUUID())) {
-      return fail(source, "You do not have permission to do that.");
+      return fail(source, "Only the clan leader can disband the clan.");
+    }
+    pendingDisband.put(player.getUUID(), System.currentTimeMillis() + DISBAND_CONFIRM_WINDOW_MILLIS);
+    MutableComponent prompt = Component.literal("Disband " + clan.getName()
+            + "? This cannot be undone. ").withStyle(ChatFormatting.YELLOW)
+            .append(button("[CONFIRM]", "/clan disband confirm", ChatFormatting.RED))
+            .append(Component.literal(" (within 30s)").withStyle(ChatFormatting.GRAY));
+    source.sendSuccess(() -> prompt, false);
+    return 1;
+  }
+
+  // /clan disband confirm — completes a disband armed within the last 30s.
+  private static int disbandConfirm(CommandSourceStack source) {
+    ServerPlayer player = player(source);
+    ClanData data = data(source);
+    Clan clan = ownClan(source, data, player);
+    if (clan == null) {
+      return 0;
+    }
+    if (!clan.getLeader().equals(player.getUUID())) {
+      return fail(source, "Only the clan leader can disband the clan.");
+    }
+    Long deadline = pendingDisband.remove(player.getUUID());
+    if (deadline == null || System.currentTimeMillis() > deadline) {
+      return fail(source, "No pending disband to confirm. Run /clan disband first.");
     }
     if (!chargeAction(source, data, player, clan, ClanAction.CLAN_DISBAND)) {
       return 0;
     }
-    notifyClan(source, data, clan, "Clan " + clan.getName() + " was disbanded.", "While you were offline, clan " + clan.getName() + " was disbanded.", player.getUUID());
+    String name = clan.getName();
+    notifyClan(source, data, clan, "Clan " + name + " was disbanded.", "While you were offline, clan " + name + " was disbanded.", player.getUUID());
     data.deleteClan(clan);
     data.syncClanMembersToAllOnlinePlayers();
     TabListManager.refreshAll(source.getServer());
     NameplateUtil.refreshAll(source.getServer());
-    return ok(source, "Disbanded clan " + clan.getName() + ".");
+    return ok(source, "Disbanded clan " + name + ".");
   }
 
   private static int info(CommandSourceStack source) {
@@ -145,9 +262,18 @@ public final class ClanCommands {
     }
     source.sendSuccess(() -> Component.literal("Clan " + clan.getName()), false);
     source.sendSuccess(() -> Component.literal("Tag: " + (clan.getTag().isBlank() ? "none" : "[" + clan.getTag() + "]")), false);
+    if (!clan.getDescription().isBlank()) {
+      source.sendSuccess(() -> Component.literal("Description: " + clan.getDescription()), false);
+    }
     source.sendSuccess(() -> Component.literal("Leader: " + data.playerName(clan.getLeader())), false);
     source.sendSuccess(() -> Component.literal("Co-Leaders: " + names(data, clan.getCoLeaders().stream().toList())), false);
-    source.sendSuccess(() -> Component.literal("Members: " + clan.getMembers().size()), false);
+    source.sendSuccess(() -> Component.literal("Lieutenants: " + names(data, clan.getLieutenants().stream().toList())), false);
+    source.sendSuccess(() -> Component.literal("Officers: " + names(data, clan.getOfficers().stream().toList())), false);
+    List<UUID> plainMembers = clan.getMembers().stream()
+            .filter(id -> clan.roleOf(id) == ClanRole.MEMBER)
+            .toList();
+    source.sendSuccess(() -> Component.literal("Members: " + names(data, plainMembers)), false);
+    source.sendSuccess(() -> Component.literal("Total members: " + clan.getMembers().size()), false);
     source.sendSuccess(() -> Component.literal("Allies: " + clan.getAllies().size()), false);
     source.sendSuccess(() -> Component.literal("Enemies: " + clan.getEnemies().size()), false);
     return 1;
@@ -163,48 +289,114 @@ public final class ClanCommands {
     return clans.size();
   }
 
-  private static int invite(CommandSourceStack source, ServerPlayer target) {
+  private static int invite(CommandSourceStack source, String targetName) {
     ServerPlayer player = player(source);
     ClanData data = data(source);
     data.rememberPlayer(player.getUUID(), player.getGameProfile().getName());
-    data.rememberPlayer(target.getUUID(), target.getGameProfile().getName());
     Clan clan = ownManagedClan(source, data, player);
     if (clan == null) {
       return 0;
     }
-    if (data.clanOf(target.getUUID()).isPresent()) {
-      return fail(source, "That player is already in a clan.");
+    UUID targetId = data.playerByName(targetName).orElse(null);
+    if (targetId == null) {
+      return fail(source, "No player named '" + targetName + "' has been seen on this server.");
     }
-    data.invite(target.getUUID(), clan);
-    sendClanInviteMessage(target, clan);
-    return ok(source, "Invited " + target.getGameProfile().getName() + " to " + clan.getName() + ".");
+    if (targetId.equals(player.getUUID())) {
+      return fail(source, "You cannot invite yourself.");
+    }
+    if (data.clanOf(targetId).isPresent()) {
+      return fail(source, data.playerName(targetId) + " is already in a clan.");
+    }
+    data.invite(targetId, clan);
+    ServerPlayer onlineTarget = source.getServer().getPlayerList().getPlayer(targetId);
+    if (onlineTarget != null) {
+      sendClanInviteMessage(onlineTarget, clan);
+    } else {
+      // Offline target: the invite waits (clan invites last 24h by default). Leave them
+      // a notification so they see it on next login, and they can use /clan invites too.
+      data.queueNotification(targetId, "You were invited to join " + clan.getName()
+              + ". Use /clan invites to view or accept it.");
+    }
+    return ok(source, "Invited " + data.playerName(targetId) + " to " + clan.getName() + ".");
   }
 
-  private static int accept(CommandSourceStack source) {
+  private static int invites(CommandSourceStack source) {
+    ServerPlayer player = player(source);
+    ClanData data = data(source);
+    List<ClanData.PendingClanInvite> invites = data.pendingInvites(player.getUUID());
+    if (invites.isEmpty()) {
+      return ok(source, "You have no pending clan invites.");
+    }
+    long now = System.currentTimeMillis();
+    source.sendSuccess(() -> Component.literal("Pending clan invites:"), false);
+    for (ClanData.PendingClanInvite invite : invites) {
+      String clanName = invite.clan().getName();
+      MutableComponent line = Component.literal("- " + clanName + " ")
+              .append(button("[ACCEPT]", "/clan accept " + clanName, ChatFormatting.GREEN))
+              .append(Component.literal(" "))
+              .append(button("[DENY]", "/clan deny " + clanName, ChatFormatting.RED))
+              .append(Component.literal(" (expires in " + formatDuration(invite.expiresAtMillis() - now) + ")")
+                      .withStyle(ChatFormatting.GRAY));
+      source.sendSuccess(() -> line, false);
+    }
+    return invites.size();
+  }
+
+  private static int accept(CommandSourceStack source, String clanName) {
     ServerPlayer player = player(source);
     ClanData data = data(source);
     if (data.clanOf(player.getUUID()).isPresent()) {
       return fail(source, "You are already in a clan.");
     }
-    Clan clan = data.pendingInvite(player.getUUID()).orElse(null);
+    Clan clan = resolveInvite(source, data, player, clanName, "accept");
     if (clan == null) {
-      return fail(source, "You do not have a pending clan invite.");
+      return 0;
     }
-    data.addMember(clan, player.getUUID());
+    data.addMember(clan, player.getUUID());  // also clears the player's other invites
     TabListManager.refreshAll(source.getServer());
     NameplateUtil.refreshAll(source.getServer());  // covers all viewer/target pairs
     notifyClan(source, data, clan, player.getGameProfile().getName() + " joined the clan.", player.getUUID());
     return ok(source, "Joined " + clan.getName() + ".");
   }
 
-  private static int deny(CommandSourceStack source) {
+  private static int deny(CommandSourceStack source, String clanName) {
     ServerPlayer player = player(source);
     ClanData data = data(source);
-    if (data.pendingInvite(player.getUUID()).isEmpty()) {
-      return fail(source, "You do not have a pending clan invite.");
+    Clan clan = resolveInvite(source, data, player, clanName, "deny");
+    if (clan == null) {
+      return 0;
     }
-    data.clearInvite(player.getUUID());
-    return ok(source, "Denied the clan invite.");
+    data.clearInvite(player.getUUID(), clan.getId());
+    return ok(source, "Denied the invite from " + clan.getName() + ".");
+  }
+
+  /**
+   * Resolves which invited clan a no-/single-argument accept or deny refers to.
+   * Sends a specific failure and returns null when there is nothing to act on or
+   * the choice is ambiguous.
+   */
+  private static Clan resolveInvite(CommandSourceStack source, ClanData data, ServerPlayer player, String clanName, String verb) {
+    List<ClanData.PendingClanInvite> invites = data.pendingInvites(player.getUUID());
+    if (invites.isEmpty()) {
+      source.sendFailure(Component.literal("You do not have any pending clan invites."));
+      return null;
+    }
+    if (clanName == null) {
+      if (invites.size() > 1) {
+        String names = invites.stream().map(invite -> invite.clan().getName()).collect(Collectors.joining(", "));
+        source.sendFailure(Component.literal("You have invites from " + names
+                + ". Use /clan " + verb + " <clan> to choose one."));
+        return null;
+      }
+      return invites.get(0).clan();
+    }
+    Clan clan = data.clanByName(clanName)
+            .filter(c -> data.hasInvite(player.getUUID(), c.getId()))
+            .orElse(null);
+    if (clan == null) {
+      source.sendFailure(Component.literal("You do not have a pending invite from that clan."));
+    }
+    return clan;
   }
 
   private static int kick(CommandSourceStack source, String targetName) {
@@ -219,7 +411,10 @@ public final class ClanCommands {
       return 0;
     }
     if (targetId.equals(clan.getLeader())) {
-      return fail(source, "You do not have permission to do that.");
+      return fail(source, "You cannot kick the clan leader.");
+    }
+    if (!outranks(clan, player, targetId)) {
+      return fail(source, "You can only kick members ranked below you.");
     }
     data.removeMemberWithPvpDelay(clan, targetId, pvpAllowedAfter());
     TabListManager.refreshAll(source.getServer());
@@ -240,7 +435,6 @@ public final class ClanCommands {
       return fail(source, "Transfer leadership or disband the clan before leaving.");
     }
     data.removeMemberWithPvpDelay(clan, player.getUUID(), pvpAllowedAfter());
-    NameplateUtil.refresh(player);
     TabListManager.refreshAll(source.getServer());
     NameplateUtil.refresh(player);
     notifyClan(source, data, clan, player.getGameProfile().getName() + " left the clan.", player.getUUID());
@@ -259,17 +453,26 @@ public final class ClanCommands {
       return 0;
     }
     if (clan.getLeader().equals(targetId)) {
-      return fail(source, "You cannot promote this player.");
+      return fail(source, "You cannot promote the clan leader.");
     }
-    if (!clan.getCoLeaders().add(targetId)) {
-      return fail(source, "You cannot promote this player.");
+    ClanRole current = clan.roleOf(targetId);
+    ClanRole next = current.promoted();
+    if (next == current) {
+      return fail(source, data.playerName(targetId) + " is already a " + current.label()
+              + " and cannot be promoted further. Use /clan transfer to hand over leadership.");
     }
+    // You can only promote someone to a rank strictly below your own.
+    ClanRole promoterRole = clan.roleOf(player.getUUID());
+    if (!promoterRole.outranks(next)) {
+      return fail(source, "You cannot promote someone to your own rank or higher.");
+    }
+    clan.setRole(targetId, next);
     data.setDirty();
     data.syncClanMembersToAllOnlinePlayers();
     NameplateUtil.refreshAll(source.getServer());
     TabListManager.refreshAll(source.getServer());
-    notifyPlayer(source, data, targetId, "You were promoted to Co-Leader in " + clan.getName() + ".", "While you were offline, you were promoted to Co-Leader in " + clan.getName() + ".");
-    return ok(source, "Promoted " + data.playerName(targetId) + " to co-leader.");
+    notifyPlayer(source, data, targetId, "You were promoted to " + next.label() + " in " + clan.getName() + ".", "While you were offline, you were promoted to " + next.label() + " in " + clan.getName() + ".");
+    return ok(source, "Promoted " + data.playerName(targetId) + " to " + next.label() + ".");
   }
 
   private static int demote(CommandSourceStack source, String targetName) {
@@ -284,17 +487,23 @@ public final class ClanCommands {
       return 0;
     }
     if (clan.getLeader().equals(targetId)) {
-      return fail(source, "You do not have permission to do that.");
+      return fail(source, "You cannot demote the clan leader.");
     }
-    if (!clan.getCoLeaders().remove(targetId)) {
-      return fail(source, "That player is not in your clan.");
+    if (!outranks(clan, player, targetId)) {
+      return fail(source, "You can only demote members ranked below you.");
     }
+    ClanRole current = clan.roleOf(targetId);
+    ClanRole previous = current.demoted();
+    if (previous == current) {
+      return fail(source, data.playerName(targetId) + " is already a " + current.label() + " and cannot be demoted further.");
+    }
+    clan.setRole(targetId, previous);
     data.setDirty();
     data.syncClanMembersToAllOnlinePlayers();
     NameplateUtil.refreshAll(source.getServer());
     TabListManager.refreshAll(source.getServer());
-    notifyPlayer(source, data, targetId, "You were demoted to member in " + clan.getName() + ".", "While you were offline, you were demoted to member in " + clan.getName() + ".");
-    return ok(source, "Demoted " + data.playerName(targetId) + " to member.");
+    notifyPlayer(source, data, targetId, "You were demoted to " + previous.label() + " in " + clan.getName() + ".", "While you were offline, you were demoted to " + previous.label() + " in " + clan.getName() + ".");
+    return ok(source, "Demoted " + data.playerName(targetId) + " to " + previous.label() + ".");
   }
 
   private static int transfer(CommandSourceStack source, String targetName) {
@@ -305,7 +514,7 @@ public final class ClanCommands {
       return 0;
     }
     if (!clan.getLeader().equals(player.getUUID())) {
-      return fail(source, "You do not have permission to do that.");
+      return fail(source, "Only the clan leader can transfer leadership.");
     }
     UUID targetId = memberByName(source, data, clan, targetName);
     if (targetId == null) {
@@ -320,7 +529,7 @@ public final class ClanCommands {
     NameplateUtil.refreshAll(source.getServer());
     TabListManager.refreshAll(source.getServer());
     notifyClan(source, data, clan, data.playerName(targetId) + " is now the clan leader.", "While you were offline, leadership of " + clan.getName() + " was transferred to " + data.playerName(targetId) + ".", null);
-    return 1;
+    return ok(source, "Transferred leadership of " + clan.getName() + " to " + data.playerName(targetId) + ".");
   }
 
   private static int tag(CommandSourceStack source, String tag) {
@@ -338,6 +547,26 @@ public final class ClanCommands {
     TabListManager.refreshAll(source.getServer());
     NameplateUtil.refreshAll(source.getServer());
     return ok(source, "Clan tag set to [" + clan.getTag() + "].");
+  }
+
+  private static final int MAX_DESCRIPTION_LENGTH = 100;
+
+  private static int describe(CommandSourceStack source, String text) {
+    ServerPlayer player = player(source);
+    ClanData data = data(source);
+    Clan clan = ownManagedClan(source, data, player);
+    if (clan == null) {
+      return 0;
+    }
+    String description = text.strip();
+    if (description.length() > MAX_DESCRIPTION_LENGTH) {
+      return fail(source, "Clan description must be " + MAX_DESCRIPTION_LENGTH + " characters or fewer.");
+    }
+    clan.setDescription(description);
+    data.setDirty();
+    return description.isBlank()
+            ? ok(source, "Cleared the clan description.")
+            : ok(source, "Clan description set to: " + description);
   }
 
   private static int ally(CommandSourceStack source, String targetName) {
@@ -710,7 +939,7 @@ public final class ClanCommands {
       return null;
     }
     if (!clan.canManage(player.getUUID())) {
-      source.sendFailure(Component.literal("You do not have permission to do that."));
+      source.sendFailure(Component.literal("You must be an officer or higher to do that."));
       return null;
     }
     return clan;
@@ -736,6 +965,22 @@ public final class ClanCommands {
       return null;
     }
     return target;
+  }
+
+  // True if the acting player's clan rank is strictly higher than the target's.
+  private static boolean outranks(Clan clan, ServerPlayer actor, UUID targetId) {
+    return clan.roleOf(actor.getUUID()).outranks(clan.roleOf(targetId));
+  }
+
+  // Human-readable countdown, e.g. "23h 41m", "4m 12s", "37s".
+  private static String formatDuration(long millis) {
+    long totalSeconds = Math.max(0L, millis / 1000L);
+    long hours = totalSeconds / 3600L;
+    long minutes = (totalSeconds % 3600L) / 60L;
+    long seconds = totalSeconds % 60L;
+    if (hours > 0) return hours + "h " + minutes + "m";
+    if (minutes > 0) return minutes + "m " + seconds + "s";
+    return seconds + "s";
   }
 
   private static UUID memberByName(CommandSourceStack source, ClanData data, Clan clan, String name) {
@@ -791,10 +1036,11 @@ public final class ClanCommands {
   }
 
   private static void sendClanInviteMessage(ServerPlayer target, Clan clan) {
-    MutableComponent message = Component.literal("You have been invited to join " + clan.getName() + ". Type /clan accept or /clan deny. ");
-    message.append(button("[ACCEPT]", "/clan accept", ChatFormatting.GREEN));
+    MutableComponent message = Component.literal("You have been invited to join " + clan.getName() + ". ");
+    message.append(button("[ACCEPT]", "/clan accept " + clan.getName(), ChatFormatting.GREEN));
     message.append(Component.literal(" "));
-    message.append(button("[DENY]", "/clan deny", ChatFormatting.RED));
+    message.append(button("[DENY]", "/clan deny " + clan.getName(), ChatFormatting.RED));
+    message.append(Component.literal(" (expires in 24h — review later with /clan invites)").withStyle(ChatFormatting.GRAY));
     target.sendSystemMessage(message);
   }
 
@@ -866,12 +1112,12 @@ public final class ClanCommands {
   }
 
   private static int ok(CommandSourceStack source, String message) {
-    source.sendSuccess(() -> Component.literal(message), false);
+    source.sendSuccess(() -> Component.literal(message).withStyle(ChatFormatting.GREEN), false);
     return 1;
   }
 
   private static int fail(CommandSourceStack source, String message) {
-    source.sendFailure(Component.literal(message));
+    source.sendFailure(Component.literal(message).withStyle(ChatFormatting.RED));
     return 0;
   }
   private static int ffSelfOn(CommandSourceStack source) {
@@ -932,6 +1178,48 @@ public final class ClanCommands {
                     .filter(c -> !c.getId().equals(ownClanId))
                     .map(Clan::getName),
             builder);
+  }
+
+  // Suggests known players who are not in a clan (and not the inviter) — works for offline players too.
+  private static CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestInvitablePlayers(
+          CommandSourceStack source, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+    if (!(source.getEntity() instanceof ServerPlayer player)) {
+      return builder.buildFuture();
+    }
+    ClanData data = data(source);
+    return net.minecraft.commands.SharedSuggestionProvider.suggest(
+            data.knownPlayerNames().stream()
+                    .filter(name -> data.playerByName(name)
+                            .map(id -> !id.equals(player.getUUID()) && data.clanOf(id).isEmpty())
+                            .orElse(false)),
+            builder);
+  }
+
+  private static CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestPendingInvites(
+          CommandSourceStack source, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+    if (!(source.getEntity() instanceof ServerPlayer player)) {
+      return builder.buildFuture();
+    }
+    ClanData data = data(source);
+    return net.minecraft.commands.SharedSuggestionProvider.suggest(
+            data.pendingInvites(player.getUUID()).stream().map(invite -> invite.clan().getName()),
+            builder);
+  }
+
+  private static CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestEnemies(
+          CommandSourceStack source, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+    if (!(source.getEntity() instanceof ServerPlayer player)) {
+      return builder.buildFuture();
+    }
+    ClanData data = data(source);
+    return data.clanOf(player.getUUID())
+            .map(clan -> net.minecraft.commands.SharedSuggestionProvider.suggest(
+                    clan.getEnemies().stream()
+                            .map(data::clan)
+                            .flatMap(java.util.Optional::stream)
+                            .map(Clan::getName),
+                    builder))
+            .orElseGet(builder::buildFuture);
   }
 
   private static CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestAllies(

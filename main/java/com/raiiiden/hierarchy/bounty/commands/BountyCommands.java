@@ -7,6 +7,7 @@ import com.raiiiden.hierarchy.bounty.gui.BountyMenus;
 import com.raiiiden.hierarchy.bounty.model.Bounty;
 import java.util.Comparator;
 import java.util.stream.Collectors;
+import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
@@ -21,6 +22,7 @@ public final class BountyCommands {
     dispatcher.register(Commands.literal("bounty")
             .requires(source -> BountyConfig.ENABLE_BOUNTIES.get())
             .executes(ctx -> openMain(ctx.getSource(), player(ctx.getSource())))
+            .then(Commands.literal("help").executes(ctx -> help(ctx.getSource())))
             .then(Commands.literal("list").executes(ctx -> openList(ctx.getSource())))
             .then(Commands.literal("info").then(Commands.argument("target", EntityArgument.player()).executes(ctx -> info(ctx.getSource(), EntityArgument.getPlayer(ctx, "target")))))
             .then(Commands.literal("place")
@@ -37,6 +39,23 @@ public final class BountyCommands {
   // -------------------------------------------------------------------------
   // Command handlers
   // -------------------------------------------------------------------------
+
+  private static int help(CommandSourceStack source) {
+    source.sendSuccess(() -> Component.literal("Bounty commands:").withStyle(ChatFormatting.GOLD), false);
+    String[][] entries = {
+        {"/bounty", "Open the bounty board"},
+        {"/bounty list", "List active bounties"},
+        {"/bounty info <player>", "Show a player's bounty"},
+        {"/bounty place", "Place a new bounty"},
+        {"/bounty contribute", "Add to an existing bounty"},
+        {"/bounty redeem", "Redeem rewards you've earned"},
+    };
+    for (String[] entry : entries) {
+      source.sendSuccess(() -> Component.literal(entry[0]).withStyle(ChatFormatting.YELLOW)
+              .append(Component.literal(" — " + entry[1]).withStyle(ChatFormatting.GRAY)), false);
+    }
+    return 1;
+  }
 
   // /bounty — opens the main bounty board. Blocked in NPC_ONLY mode.
   private static int openMain(CommandSourceStack source, ServerPlayer player) {
@@ -99,7 +118,7 @@ public final class BountyCommands {
    */
   private static boolean accessAllowed(CommandSourceStack source) {
     if (BountyConfig.isNpcOnly()) {
-      source.sendFailure(Component.literal(BountyConfig.NPC_ONLY_BLOCKED_MESSAGE.get()));
+      source.sendFailure(Component.literal(BountyConfig.NPC_ONLY_BLOCKED_MESSAGE.get()).withStyle(ChatFormatting.RED));
       return false;
     }
     return true;
@@ -124,12 +143,12 @@ public final class BountyCommands {
   }
 
   private static int ok(CommandSourceStack source, String message) {
-    source.sendSuccess(() -> Component.literal(message), false);
+    source.sendSuccess(() -> Component.literal(message).withStyle(ChatFormatting.GREEN), false);
     return 1;
   }
 
   private static int fail(CommandSourceStack source, String message) {
-    source.sendFailure(Component.literal(message));
+    source.sendFailure(Component.literal(message).withStyle(ChatFormatting.RED));
     return 0;
   }
 }

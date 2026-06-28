@@ -39,7 +39,8 @@ public class ClanData extends SavedData {
   private final Map<UUID, Clan> clans = new LinkedHashMap<>();
   private final Map<UUID, UUID> playerClans = new HashMap<>();
   private final Map<String, String> clanNameIndex = new HashMap<>();
-  private final Map<UUID, UUID> pendingInvites = new HashMap<>();
+  // player -> (clan -> invitedAt millis). A player may hold invites from several clans.
+  private final Map<UUID, Map<UUID, Long>> pendingInvites = new HashMap<>();
   private final Map<String, Boolean> friendlyFire = new HashMap<>();
   private final Map<String, Long> pvpDelayUntil = new HashMap<>();
   private final Map<UUID, List<String>> offlineNotifications = new HashMap<>();
@@ -77,6 +78,7 @@ public class ClanData extends SavedData {
       CompoundTag clanTag = clanTags.getCompound(i);
       Clan clan = new Clan(clanTag.getUUID("Id"), clanTag.getString("Name"), clanTag.getUUID("Leader"));
       clan.setTag(clanTag.getString("Tag"));
+      clan.setDescription(clanTag.getString("Description"));
       readUuidSet(clanTag.getList("CoLeaders", 8), clan.getCoLeaders());
       readUuidSet(clanTag.getList("Lieutenants", 8), clan.getLieutenants());
       readUuidSet(clanTag.getList("Officers", 8), clan.getOfficers());
@@ -103,7 +105,20 @@ public class ClanData extends SavedData {
         data.playerClans.put(member, clan.getId());
       }
     }
-    readUuidUuidMap(tag.getList("PendingInvites", 10), data.pendingInvites, "Player", "Clan");
+    ListTag inviteTags = tag.getList("PendingInvites", 10);
+    for (int i = 0; i < inviteTags.size(); i++) {
+      CompoundTag playerTag = inviteTags.getCompound(i);
+      UUID playerId = playerTag.getUUID("Player");
+      Map<UUID, Long> invites = new HashMap<>();
+      ListTag clanList = playerTag.getList("Invites", 10);
+      for (int j = 0; j < clanList.size(); j++) {
+        CompoundTag inviteTag = clanList.getCompound(j);
+        invites.put(inviteTag.getUUID("Clan"), inviteTag.getLong("Timestamp"));
+      }
+      if (!invites.isEmpty()) {
+        data.pendingInvites.put(playerId, invites);
+      }
+    }
     readStringBooleanMap(tag.getList("FriendlyFire", 10), data.friendlyFire);
     readStringLongMap(tag.getList("PvpDelays", 10), data.pvpDelayUntil);
     readStringLongMap(tag.getList("PlayerClanPvpDelays", 10), data.playerClanPvpDelayUntil);
@@ -136,6 +151,7 @@ public class ClanData extends SavedData {
       clanTag.putUUID("Id", clan.getId());
       clanTag.putString("Name", clan.getName());
       clanTag.putString("Tag", clan.getTag());
+      clanTag.putString("Description", clan.getDescription());
       clanTag.putUUID("Leader", clan.getLeader());
       clanTag.put("CoLeaders", writeUuidSet(clan.getCoLeaders()));
       clanTag.put("Lieutenants", writeUuidSet(clan.getLieutenants()));
@@ -160,7 +176,21 @@ public class ClanData extends SavedData {
       clanTags.add(clanTag);
     }
     tag.put("Clans", clanTags);
-    tag.put("PendingInvites", writeUuidUuidMap(pendingInvites, "Player", "Clan"));
+    ListTag inviteTags = new ListTag();
+    for (Map.Entry<UUID, Map<UUID, Long>> entry : pendingInvites.entrySet()) {
+      CompoundTag playerTag = new CompoundTag();
+      playerTag.putUUID("Player", entry.getKey());
+      ListTag clanList = new ListTag();
+      for (Map.Entry<UUID, Long> invite : entry.getValue().entrySet()) {
+        CompoundTag inviteTag = new CompoundTag();
+        inviteTag.putUUID("Clan", invite.getKey());
+        inviteTag.putLong("Timestamp", invite.getValue());
+        clanList.add(inviteTag);
+      }
+      playerTag.put("Invites", clanList);
+      inviteTags.add(playerTag);
+    }
+    tag.put("PendingInvites", inviteTags);
     tag.put("FriendlyFire", writeStringBooleanMap(friendlyFire));
     tag.put("PvpDelays", writeStringLongMap(pvpDelayUntil));
     tag.put("PlayerClanPvpDelays", writeStringLongMap(playerClanPvpDelayUntil));
@@ -242,7 +272,8 @@ public class ClanData extends SavedData {
     }
     clans.remove(clan.getId());
     clanNameIndex.remove(normalize(clan.getName()));
-    pendingInvites.values().removeIf(clan.getId()::equals);
+    pendingInvites.values().forEach(invites -> invites.remove(clan.getId()));
+    pendingInvites.values().removeIf(Map::isEmpty);
     if (ClanCombatConfig.USE_VANILLA_TEAMS.get() && server != null) {
       String teamName = "clan_" + clan.getId().toString().replace("-", "").substring(0, 16);
       PlayerTeam team = server.getScoreboard().getPlayerTeam(teamName);
@@ -259,7 +290,7 @@ public class ClanData extends SavedData {
   public void addMember(Clan clan, UUID playerId) {
     clan.getMembers().add(playerId);
     playerClans.put(playerId, clan.getId());
-    pendingInvites.remove(playerId);
+    clearInvites(playerId);  // joining a clan drops any other pending invites
     clearCombatSnapshots(playerId);
     if (ClanCombatConfig.USE_VANILLA_TEAMS.get()) {
       PlayerTeam team = getOrCreateTeam(clan);
@@ -288,19 +319,102 @@ public class ClanData extends SavedData {
     setPlayerClanPvpDelay(playerId, clan.getId(), delayUntil);
   }
 
+  /** A pending clan invite paired with the absolute time (millis) it expires. */
+  public record PendingClanInvite(Clan clan, long expiresAtMillis) {}
+
+  private static long inviteTtlMillis() {
+    return ClanCombatConfig.INVITE_EXPIRY_HOURS.get() * 3_600_000L;
+  }
+
   public void invite(UUID playerId, Clan clan) {
-    pendingInvites.put(playerId, clan.getId());
+    pendingInvites.computeIfAbsent(playerId, ignored -> new HashMap<>())
+            .put(clan.getId(), System.currentTimeMillis());
     setDirty();
   }
 
-  public Optional<Clan> pendingInvite(UUID playerId) {
-    UUID clanId = pendingInvites.get(playerId);
-    return clanId == null ? Optional.empty() : Optional.ofNullable(clans.get(clanId));
+  /**
+   * Drops any of the player's invites that have expired (older than the configured
+   * expiry) or whose clan no longer exists. Returns the surviving invites, never null.
+   */
+  private Map<UUID, Long> liveInvites(UUID playerId) {
+    Map<UUID, Long> invites = pendingInvites.get(playerId);
+    if (invites == null) {
+      return Collections.emptyMap();
+    }
+    long now = System.currentTimeMillis();
+    long ttl = inviteTtlMillis();
+    List<UUID> expiredClans = new ArrayList<>();
+    boolean changed = invites.entrySet().removeIf(entry -> {
+      boolean expired = now - entry.getValue() > ttl;
+      if (expired) {
+        expiredClans.add(entry.getKey());
+      }
+      return expired || !clans.containsKey(entry.getKey());
+    });
+    for (UUID clanId : expiredClans) {
+      Clan clan = clans.get(clanId);
+      notifyInviteExpired(playerId, clan != null ? clan.getName() : "a clan");
+    }
+    if (invites.isEmpty()) {
+      pendingInvites.remove(playerId);
+    }
+    if (changed) {
+      setDirty();
+    }
+    return invites;
   }
 
-  public void clearInvite(UUID playerId) {
-    pendingInvites.remove(playerId);
-    setDirty();
+  // Tells the invited player their invite lapsed — directly if online, queued if not.
+  private void notifyInviteExpired(UUID playerId, String clanName) {
+    String message = "Your invitation to join " + clanName + " has expired.";
+    ServerPlayer online = server == null ? null : server.getPlayerList().getPlayer(playerId);
+    if (online != null) {
+      online.sendSystemMessage(Component.literal(message));
+    } else {
+      queueNotification(playerId, message);
+    }
+  }
+
+  /** All (non-expired) invites the player currently holds, with their expiry times. */
+  public List<PendingClanInvite> pendingInvites(UUID playerId) {
+    long ttl = inviteTtlMillis();
+    List<PendingClanInvite> result = new ArrayList<>();
+    for (Map.Entry<UUID, Long> entry : liveInvites(playerId).entrySet()) {
+      Clan clan = clans.get(entry.getKey());
+      if (clan != null) {
+        result.add(new PendingClanInvite(clan, entry.getValue() + ttl));
+      }
+    }
+    return result;
+  }
+
+  /** Sweeps every player's invite list, removing expired/orphaned entries. */
+  public void purgeExpiredInvites() {
+    for (UUID playerId : new ArrayList<>(pendingInvites.keySet())) {
+      liveInvites(playerId);
+    }
+  }
+
+  public boolean hasInvite(UUID playerId, UUID clanId) {
+    return liveInvites(playerId).containsKey(clanId);
+  }
+
+  /** Removes a single invite (e.g. on deny). */
+  public void clearInvite(UUID playerId, UUID clanId) {
+    Map<UUID, Long> invites = pendingInvites.get(playerId);
+    if (invites != null && invites.remove(clanId) != null) {
+      if (invites.isEmpty()) {
+        pendingInvites.remove(playerId);
+      }
+      setDirty();
+    }
+  }
+
+  /** Removes every invite for the player (e.g. once they join a clan). */
+  public void clearInvites(UUID playerId) {
+    if (pendingInvites.remove(playerId) != null) {
+      setDirty();
+    }
   }
 
   public void addAlliance(Clan first, Clan second) {
@@ -499,6 +613,11 @@ public class ClanData extends SavedData {
     return Optional.ofNullable(playerNameIndex.get(normalize(name)));
   }
 
+  /** Every player name the server has remembered (snapshot copy, safe to stream). */
+  public Collection<String> knownPlayerNames() {
+    return List.copyOf(playerNames.values());
+  }
+
   public String playerName(UUID playerId) {
     return playerNames.getOrDefault(playerId, playerId.toString());
   }
@@ -547,24 +666,6 @@ public class ClanData extends SavedData {
     ListTag tag = new ListTag();
     for (UUID value : values) {
       tag.add(StringTag.valueOf(value.toString()));
-    }
-    return tag;
-  }
-
-  private static void readUuidUuidMap(ListTag tag, Map<UUID, UUID> target, String keyName, String valueName) {
-    for (int i = 0; i < tag.size(); i++) {
-      CompoundTag entry = tag.getCompound(i);
-      target.put(entry.getUUID(keyName), entry.getUUID(valueName));
-    }
-  }
-
-  private static ListTag writeUuidUuidMap(Map<UUID, UUID> values, String keyName, String valueName) {
-    ListTag tag = new ListTag();
-    for (Map.Entry<UUID, UUID> entry : values.entrySet()) {
-      CompoundTag entryTag = new CompoundTag();
-      entryTag.putUUID(keyName, entry.getKey());
-      entryTag.putUUID(valueName, entry.getValue());
-      tag.add(entryTag);
     }
     return tag;
   }

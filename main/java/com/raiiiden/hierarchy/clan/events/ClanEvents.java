@@ -187,13 +187,26 @@ public class ClanEvents {
     if (!(event.getEntity() instanceof ServerPlayer player)) {
       return;
     }
-    NameplateUtil.refresh(player);
+    // Respawn recreates the player entity with empty synched data, so re-sync the
+    // nameplate in BOTH directions (the respawned player's plate out to everyone,
+    // and everyone else's plates back to the respawned player) — same as a fresh join.
+    NameplateUtil.refreshOnJoin(player);
   }
   @SubscribeEvent
   public void onPlayerChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
     if (!(event.getEntity() instanceof ServerPlayer player)) {
       return;
     }
-    NameplateUtil.refresh(player);
+    // Changing dimension re-tracks every entity on the client, dropping per-viewer
+    // overrides — re-sync nameplates in both directions just like respawn/join.
+    NameplateUtil.refreshOnJoin(player);
+  }
+
+  @SubscribeEvent
+  public void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
+    if (event.getEntity() instanceof ServerPlayer player) {
+      // Don't leave an armed /clan disband confirmation hanging across sessions.
+      com.raiiiden.hierarchy.clan.commands.ClanCommands.clearPendingDisband(player.getUUID());
+    }
   }
 }

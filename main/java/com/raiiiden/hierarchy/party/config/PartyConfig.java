@@ -6,6 +6,7 @@ public final class PartyConfig {
     public static final ForgeConfigSpec SPEC;
     public static final ForgeConfigSpec.BooleanValue ENABLE_PARTIES;
     public static final ForgeConfigSpec.IntValue MAX_PARTY_MEMBERS;
+    public static final ForgeConfigSpec.IntValue INVITE_EXPIRY_SECONDS;
     public static final ForgeConfigSpec.DoubleValue PARTY_RENDER_DISTANCE_BLOCKS;
     public static final ForgeConfigSpec.BooleanValue SHOW_PARTY_INDICATOR;
     public static final ForgeConfigSpec.ConfigValue<String> PARTY_INDICATOR_COLOR;
@@ -19,6 +20,9 @@ public final class PartyConfig {
         MAX_PARTY_MEMBERS = builder
                 .comment("Maximum number of members per party (including the leader).")
                 .defineInRange("maxPartyMembers", 4, 2, 100);
+        INVITE_EXPIRY_SECONDS = builder
+                .comment("Seconds before a pending party invite expires (real time).")
+                .defineInRange("inviteExpirySeconds", 60, 5, 3600);
         PARTY_RENDER_DISTANCE_BLOCKS = builder
                 .comment("Maximum distance in blocks at which the party indicator (◆/★) is visible.")
                 .defineInRange("partyRenderDistanceBlocks", 64.0D, 0.0D, 256.0D);

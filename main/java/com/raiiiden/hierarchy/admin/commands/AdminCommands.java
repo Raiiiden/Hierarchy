@@ -10,6 +10,7 @@ import com.raiiiden.hierarchy.clan.data.ClanData;
 import com.raiiiden.hierarchy.clan.model.Clan;
 import com.raiiiden.hierarchy.humanity.data.HumanityData;
 import com.raiiiden.hierarchy.nameplate.NameplateUtil;
+import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
@@ -22,6 +23,9 @@ public final class AdminCommands {
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("hierarchyadmin")
                 .requires(source -> source.hasPermission(2))  // op level 2
+
+                .then(Commands.literal("help")
+                        .executes(ctx -> help(ctx.getSource())))
 
                 // Humanity commands
                 .then(Commands.literal("humanity")
@@ -105,6 +109,24 @@ public final class AdminCommands {
                         .then(Commands.argument("player", EntityArgument.player())
                                 .executes(ctx -> openBountyGui(ctx.getSource(),
                                         EntityArgument.getPlayer(ctx, "player"))))));
+    }
+
+    private static int help(CommandSourceStack source) {
+        source.sendSuccess(() -> Component.literal("Hierarchy admin commands:").withStyle(ChatFormatting.GOLD), false);
+        String[][] entries = {
+                {"/hierarchyadmin humanity get|set|add|reset <player> [amount]", "Manage humanity"},
+                {"/hierarchyadmin bounty clear|clearall|info [player]", "Manage bounties"},
+                {"/hierarchyadmin clan disband|info|kick <player>", "Manage a player's clan"},
+                {"/hierarchyadmin clan clearpvpdelays [player]", "Clear PvP delays"},
+                {"/hierarchyadmin clan resync", "Resync clan scoreboard teams"},
+                {"/hierarchyadmin openbounty <player>", "Open the bounty board for a player"},
+                {"/hierarchyadmin wipe bounties|humanity", "Wipe all stored data"},
+        };
+        for (String[] entry : entries) {
+            source.sendSuccess(() -> Component.literal(entry[0]).withStyle(ChatFormatting.YELLOW)
+                    .append(Component.literal(" — " + entry[1]).withStyle(ChatFormatting.GRAY)), false);
+        }
+        return 1;
     }
 
     // --- Humanity ---
@@ -271,12 +293,12 @@ public final class AdminCommands {
     }
 
     private static int ok(CommandSourceStack source, String message) {
-        source.sendSuccess(() -> Component.literal(message), true); // true = log to ops
+        source.sendSuccess(() -> Component.literal(message).withStyle(ChatFormatting.GREEN), true); // true = log to ops
         return 1;
     }
 
     private static int fail(CommandSourceStack source, String message) {
-        source.sendFailure(Component.literal(message));
+        source.sendFailure(Component.literal(message).withStyle(ChatFormatting.RED));
         return 0;
     }
 }
