@@ -87,6 +87,14 @@ public class ClanData extends SavedData {
       readUuidSet(clanTag.getList("Allies", 8), clan.getAllies());
       readUuidSet(clanTag.getList("Enemies", 8), clan.getEnemies());
       clan.setBankBalance(clanTag.getLong("BankBalance"));
+      clan.setCreatedAt(clanTag.contains("CreatedAt") ? clanTag.getLong("CreatedAt") : System.currentTimeMillis());
+      clan.setKills(clanTag.getInt("Kills"));
+      clan.setDeaths(clanTag.getInt("Deaths"));
+      clan.setBountiesClaimed(clanTag.getInt("BountiesClaimed"));
+      clan.setBountiesPlaced(clanTag.getInt("BountiesPlaced"));
+      clan.setTotalMembersJoined(clanTag.contains("TotalMembersJoined") ? clanTag.getInt("TotalMembersJoined") : clan.getMembers().size());
+      clan.setTotalHumanityGained(clanTag.getDouble("TotalHumanityGained"));
+      clan.setTotalHumanityLost(clanTag.getDouble("TotalHumanityLost"));
       ListTag transactionTags = clanTag.getList("Transactions", 10);
       clan.setInternalFriendlyFire(clanTag.getBoolean("InternalFF"));
       for (int j = 0; j < transactionTags.size(); j++) {
@@ -160,6 +168,14 @@ public class ClanData extends SavedData {
       clanTag.put("Allies", writeUuidSet(clan.getAllies()));
       clanTag.put("Enemies", writeUuidSet(clan.getEnemies()));
       clanTag.putLong("BankBalance", clan.getBankBalance());
+      clanTag.putLong("CreatedAt", clan.getCreatedAt());
+      clanTag.putInt("Kills", clan.getKills());
+      clanTag.putInt("Deaths", clan.getDeaths());
+      clanTag.putInt("BountiesClaimed", clan.getBountiesClaimed());
+      clanTag.putInt("BountiesPlaced", clan.getBountiesPlaced());
+      clanTag.putInt("TotalMembersJoined", clan.getTotalMembersJoined());
+      clanTag.putDouble("TotalHumanityGained", clan.getTotalHumanityGained());
+      clanTag.putDouble("TotalHumanityLost", clan.getTotalHumanityLost());
       clanTag.putBoolean("InternalFF", clan.isInternalFriendlyFireEnabled());
       ListTag transactionTags = new ListTag();
       for (BankTransaction transaction : clan.getTransactions()) {
@@ -288,7 +304,10 @@ public class ClanData extends SavedData {
   }
 
   public void addMember(Clan clan, UUID playerId) {
-    clan.getMembers().add(playerId);
+    boolean isNewMember = clan.getMembers().add(playerId);
+    if (isNewMember) {
+      clan.addMemberJoined();
+    }
     playerClans.put(playerId, clan.getId());
     clearInvites(playerId);  // joining a clan drops any other pending invites
     clearCombatSnapshots(playerId);

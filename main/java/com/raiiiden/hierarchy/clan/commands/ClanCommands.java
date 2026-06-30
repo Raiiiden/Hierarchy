@@ -65,6 +65,7 @@ public final class ClanCommands {
             .executes(ctx -> disband(ctx.getSource()))
             .then(Commands.literal("confirm").executes(ctx -> disbandConfirm(ctx.getSource()))))
         .then(Commands.literal("info").executes(ctx -> info(ctx.getSource())))
+        .then(Commands.literal("stats").executes(ctx -> stats(ctx.getSource())))
         .then(Commands.literal("list").executes(ctx -> list(ctx.getSource())))
         .then(Commands.literal("invite").then(Commands.argument("player", StringArgumentType.word())
             .suggests((ctx, builder) -> suggestInvitablePlayers(ctx.getSource(), builder))
@@ -149,6 +150,7 @@ public final class ClanCommands {
     source.sendSuccess(() -> Component.literal("Clan commands:").withStyle(ChatFormatting.GOLD), false);
     String[][] entries = {
         {"/clan", "Show your clan info"},
+        {"/clan stats", "Show your clan's statistics"},
         {"/clan create <name> <tag>", "Found a new clan"},
         {"/clan invite <player>", "Invite a player"},
         {"/clan invites", "Show your pending invites"},
@@ -276,6 +278,30 @@ public final class ClanCommands {
     source.sendSuccess(() -> Component.literal("Total members: " + clan.getMembers().size()), false);
     source.sendSuccess(() -> Component.literal("Allies: " + clan.getAllies().size()), false);
     source.sendSuccess(() -> Component.literal("Enemies: " + clan.getEnemies().size()), false);
+    source.sendSuccess(() -> Component.literal("Founded: " + formatDate(clan.getCreatedAt())), false);
+    int online = (int) clan.getMembers().stream()
+            .filter(id -> source.getServer().getPlayerList().getPlayer(id) != null)
+            .count();
+    source.sendSuccess(() -> Component.literal("Online Members: " + online + "/" + clan.getMembers().size()), false);
+    return 1;
+  }
+
+  private static int stats(CommandSourceStack source) {
+    ServerPlayer player = player(source);
+    ClanData data = data(source);
+    Clan clan = ownClan(source, data, player);
+    if (clan == null) {
+      return 0;
+    }
+    source.sendSuccess(() -> Component.literal(clan.getName() + " — Stats").withStyle(ChatFormatting.GOLD), false);
+    source.sendSuccess(() -> Component.literal("Kills: " + clan.getKills()), false);
+    source.sendSuccess(() -> Component.literal("Deaths: " + clan.getDeaths()), false);
+    source.sendSuccess(() -> Component.literal(String.format("KDR: %.2f", clan.getKdr())), false);
+    source.sendSuccess(() -> Component.literal("Bounties Claimed: " + clan.getBountiesClaimed()), false);
+    source.sendSuccess(() -> Component.literal("Bounties Placed: " + clan.getBountiesPlaced()), false);
+    source.sendSuccess(() -> Component.literal(String.format("Total Humanity Gained: %.1f", clan.getTotalHumanityGained())), false);
+    source.sendSuccess(() -> Component.literal(String.format("Total Humanity Lost: %.1f", clan.getTotalHumanityLost())), false);
+    source.sendSuccess(() -> Component.literal("Clan Age: " + formatAge(System.currentTimeMillis() - clan.getCreatedAt())), false);
     return 1;
   }
 
@@ -981,6 +1007,21 @@ public final class ClanCommands {
     if (hours > 0) return hours + "h " + minutes + "m";
     if (minutes > 0) return minutes + "m " + seconds + "s";
     return seconds + "s";
+  }
+
+  // Calendar date for a founding timestamp, e.g. "2026-06-29".
+  private static String formatDate(long epochMillis) {
+    return java.time.Instant.ofEpochMilli(epochMillis)
+            .atZone(java.time.ZoneId.systemDefault())
+            .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+  }
+
+  // Coarse age, e.g. "12d 5h" for older clans, falling back to the countdown format.
+  private static String formatAge(long millis) {
+    long days = Math.max(0L, millis) / 86_400_000L;
+    long hours = (Math.max(0L, millis) % 86_400_000L) / 3_600_000L;
+    if (days > 0) return days + "d " + hours + "h";
+    return formatDuration(millis);
   }
 
   private static UUID memberByName(CommandSourceStack source, ClanData data, Clan clan, String name) {

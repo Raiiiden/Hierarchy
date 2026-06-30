@@ -6,6 +6,7 @@ import com.raiiiden.hierarchy.bounty.data.BountyData;
 import com.raiiiden.hierarchy.clan.config.ClanCombatConfig;
 import com.raiiiden.hierarchy.clan.data.ClanData;
 import com.raiiiden.hierarchy.clan.model.Clan;
+import com.raiiiden.hierarchy.humanity.HumanityRank;
 import com.raiiiden.hierarchy.humanity.config.HumanityConfig;
 import com.raiiiden.hierarchy.humanity.data.HumanityData;
 import net.minecraft.ChatFormatting;
@@ -23,8 +24,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 public final class NameplateUtil {
-  private static final String[] ROMAN = {"I", "II", "III", "IV", "V"};
-
   // Entity DATA_CUSTOM_NAME is slot 2, DATA_CUSTOM_NAME_VISIBLE is slot 3.
   // These are stable for all vanilla 1.20.x entities.
   private static final int SLOT_CUSTOM_NAME         = 2;
@@ -176,18 +175,6 @@ public final class NameplateUtil {
   }
 
   private static Component humanityLabel(int humanity) {
-    int min = HumanityConfig.MIN_HUMANITY.get().intValue();
-    int max = HumanityConfig.MAX_HUMANITY.get().intValue();
-    if (humanity < 0) {
-      int level = level(Math.abs(humanity), Math.max(1, Math.abs(min)));
-      return Component.literal("Bandit " + ROMAN[level - 1]).withStyle(ChatFormatting.RED);
-    }
-    int level = level(humanity, Math.max(1, max));
-    return Component.literal("Hero " + ROMAN[level - 1]).withStyle(ChatFormatting.AQUA);
-  }
-
-  private static int level(int value, int range) {
-    if (value <= 0) return 1;
-    return Math.max(1, Math.min(5, (int) Math.ceil(value / (range / 5.0D))));
+    return HumanityRank.styled(humanity);
   }
 }

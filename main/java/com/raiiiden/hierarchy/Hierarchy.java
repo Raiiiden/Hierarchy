@@ -8,6 +8,7 @@ import com.raiiiden.hierarchy.clan.commands.ClanCommands;
 import com.raiiiden.hierarchy.clan.config.ClanCombatConfig;
 import com.raiiiden.hierarchy.clan.data.ClanData;
 import com.raiiiden.hierarchy.clan.events.ClanEvents;
+import com.raiiiden.hierarchy.humanity.commands.HumanityCommands;
 import com.raiiiden.hierarchy.humanity.config.HumanityConfig;
 import com.raiiiden.hierarchy.nameplate.NameplateConfig;
 import com.raiiiden.hierarchy.network.NetworkHandler;
@@ -49,6 +50,7 @@ public class Hierarchy {
     BountyCommands.register(event.getDispatcher());
     AdminCommands.register(event.getDispatcher());
     PartyCommands.register(event.getDispatcher());
+    HumanityCommands.register(event.getDispatcher());
   }
 
   // Sweep stale (expired/orphaned) pending invites out of saved data on startup.

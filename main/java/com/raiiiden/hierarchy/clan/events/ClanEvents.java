@@ -14,6 +14,7 @@ import java.util.UUID;
 import com.raiiiden.hierarchy.nameplate.TabListManager;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.DamageTypeTags;
@@ -68,11 +69,13 @@ public class ClanEvents {
     ClanData data = ClanData.get(player.server);
     Clan clan = data.clanOf(player.getUUID()).orElse(null);
     if (clan == null || clan.getTag().isBlank()) return;
-    event.setDisplayName(
-            Component.literal("[" + clan.getTag() + "] ").withStyle(ChatFormatting.GOLD)
-                    .append(Component.literal(player.getGameProfile().getName())
-                            .withStyle(ChatFormatting.WHITE))
-    );
+    MutableComponent name = Component.literal("[" + clan.getTag() + "] ").withStyle(ChatFormatting.GOLD);
+    if (NameplateConfig.SHOW_CLAN_NAME_IN_TABLIST.get() && !clan.getName().isBlank()) {
+      String clanName = TabListManager.truncate(clan.getName(), NameplateConfig.TABLIST_MAX_CLAN_NAME_LENGTH.get());
+      name.append(Component.literal(clanName + " ").withStyle(ChatFormatting.GOLD));
+    }
+    name.append(Component.literal(player.getGameProfile().getName()).withStyle(ChatFormatting.WHITE));
+    event.setDisplayName(name);
   }
 
   @SubscribeEvent
@@ -91,11 +94,20 @@ public class ClanEvents {
     String name     = sender.getGameProfile().getName();
     Component body  = event.getMessage();
 
+    boolean showHover = NameplateConfig.SHOW_CLAN_NAME_ON_HOVER.get() && !senderClan.getName().isBlank();
     for (ServerPlayer viewer : sender.server.getPlayerList().getPlayers()) {
       Clan viewerClan = data.clanOf(viewer.getUUID()).orElse(null);
       ChatFormatting color = TabListManager.tagColor(viewerClan, senderClan, data);
 
-      MutableComponent line = Component.literal(tag).withStyle(color)
+      MutableComponent tagComponent = Component.literal(tag).withStyle(color);
+      if (showHover) {
+        tagComponent.withStyle(style -> style.withHoverEvent(
+                new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal(senderClan.getName()))));
+      }
+
+      // Empty root so the tag's hover does not bleed onto the name/message siblings.
+      MutableComponent line = Component.empty()
+              .append(tagComponent)
               .append(Component.literal("<" + name + "> ").withStyle(ChatFormatting.WHITE))
               .append(body.copy().withStyle(ChatFormatting.WHITE));
       viewer.sendSystemMessage(line);

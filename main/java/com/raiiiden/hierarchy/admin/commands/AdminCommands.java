@@ -9,6 +9,7 @@ import com.raiiiden.hierarchy.bounty.model.Bounty;
 import com.raiiiden.hierarchy.clan.data.ClanData;
 import com.raiiiden.hierarchy.clan.model.Clan;
 import com.raiiiden.hierarchy.humanity.data.HumanityData;
+import com.raiiiden.hierarchy.humanity.data.HumanityHistoryData;
 import com.raiiiden.hierarchy.nameplate.NameplateUtil;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
@@ -137,14 +138,14 @@ public final class AdminCommands {
     }
 
     private static int humanitySet(CommandSourceStack source, ServerPlayer target, double amount) {
-        HumanityData.get(source.getServer()).set(target.getUUID(), amount);
+        HumanityData.get(source.getServer()).set(target.getUUID(), amount, "Admin Adjustment");
         NameplateUtil.refresh(target);
         return ok(source, "Set " + target.getGameProfile().getName() + "'s humanity to " + amount + ".");
     }
 
     private static int humanityAdd(CommandSourceStack source, ServerPlayer target, double amount) {
         HumanityData data = HumanityData.get(source.getServer());
-        data.add(target.getUUID(), amount);
+        data.add(target.getUUID(), amount, "Admin Adjustment");
         NameplateUtil.refresh(target);
         double newValue = data.humanity(target.getUUID());
         return ok(source, "Adjusted " + target.getGameProfile().getName()
@@ -288,6 +289,7 @@ public final class AdminCommands {
 
     private static int wipeHumanity(CommandSourceStack source) {
         HumanityData.get(source.getServer()).clear();
+        HumanityHistoryData.get(source.getServer()).clear();
         NameplateUtil.refreshAll(source.getServer());
         return ok(source, "Wiped all humanity data.");
     }

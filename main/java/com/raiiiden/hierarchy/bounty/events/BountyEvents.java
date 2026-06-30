@@ -87,12 +87,24 @@ public class BountyEvents {
     }
     BountyData bountyData = BountyData.get(target.server);
     bountyData.recordPlayerKill(killer.getUUID(), now);
+    creditClanCombat(clans, killer.getUUID(), target.getUUID());
     adjustHumanityForKill(killer, target, now);
     bountyData.expireIfNeeded(target.getUUID(), now, target.server);
     Bounty bounty = bountyData.bounty(target.getUUID()).orElse(null);
     if (bounty != null && BountyConfig.ENABLE_DOG_TAGS.get() && BountyLogic.relationshipAllowsDogTag(target.server, killer.getUUID(), target.getUUID()) && findDogTag(killer).isEmpty()) {
       target.level().addFreshEntity(new ItemEntity(target.level(), target.getX(), target.getY(), target.getZ(), createDogTag(bounty, killer.getUUID())));
     }
+  }
+
+  private void creditClanCombat(ClanData clans, UUID killerId, UUID victimId) {
+    clans.clanOf(killerId).ifPresent(clan -> {
+      clan.addKill();
+      clans.setDirty();
+    });
+    clans.clanOf(victimId).ifPresent(clan -> {
+      clan.addDeath();
+      clans.setDirty();
+    });
   }
 
   private void adjustHumanityForKill(ServerPlayer killer, ServerPlayer target, long now) {
@@ -110,7 +122,8 @@ public class BountyEvents {
 
     double loss = playerKillLossFor(target, killerAttackedFirst, targetAttackedFirst);
     if (loss > 0.0) {
-      HumanityData.get(killer.server).add(killer.getUUID(), -loss);
+      String reason = killerAttackedFirst ? "Murder" : "Player Kill";
+      HumanityData.get(killer.server).add(killer.getUUID(), -loss, reason);
       NameplateUtil.refresh(killer);
     }
 
@@ -121,7 +134,8 @@ public class BountyEvents {
     if (!HumanityConfig.ENABLE_HUMANITY.get() || !(source instanceof ServerPlayer killer)) return;
     double gain = mobKillHumanityGain(target);
     if (gain <= 0.0) return;
-    HumanityData.get(killer.server).add(killer.getUUID(), gain);
+    String reason = target.getType().getDescription().getString() + " Kill";
+    HumanityData.get(killer.server).add(killer.getUUID(), gain, reason);
     NameplateUtil.refresh(killer);
   }
 

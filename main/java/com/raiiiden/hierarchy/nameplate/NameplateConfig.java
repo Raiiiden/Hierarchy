@@ -15,6 +15,9 @@ public final class NameplateConfig {
   public static final ForgeConfigSpec.DoubleValue ARROW_Y_OFFSET;
   public static final ForgeConfigSpec.DoubleValue ARROW_SCALE;
   public static final ForgeConfigSpec.DoubleValue ARROW_RENDER_DISTANCE_BLOCKS;
+  public static final ForgeConfigSpec.BooleanValue SHOW_CLAN_NAME_IN_TABLIST;
+  public static final ForgeConfigSpec.IntValue TABLIST_MAX_CLAN_NAME_LENGTH;
+  public static final ForgeConfigSpec.BooleanValue SHOW_CLAN_NAME_ON_HOVER;
 
   static {
     ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -33,6 +36,9 @@ public final class NameplateConfig {
     SHOW_BOUNTY_ICON = builder.comment("Show a red bounty icon next to players with an active bounty.").define("showBountyIcon", true);
     MAX_RENDER_DISTANCE_BLOCKS = builder.comment("Maximum distance in blocks where custom nameplates are visible.").defineInRange("maxRenderDistanceBlocks", 5.0D, 0.0D, 128.0D);
     REQUIRE_LINE_OF_SIGHT = builder.comment("When true, custom nameplates are hidden behind blocks.").define("requireLineOfSight", true);
+    SHOW_CLAN_NAME_IN_TABLIST = builder.comment("Show the clan name alongside the tag in the tab list, e.g. '[TAG] Name username'.").define("showClanNameInTablist", true);
+    TABLIST_MAX_CLAN_NAME_LENGTH = builder.comment("Maximum clan-name length shown in the tab list (truncated with an ellipsis). Independent of the global clan-name limit.").defineInRange("tablistMaxClanNameLength", 16, 1, 64);
+    SHOW_CLAN_NAME_ON_HOVER = builder.comment("Show the full clan name when hovering over a clan tag in chat.").define("showClanNameOnHover", true);
     builder.pop();
     SPEC = builder.build();
   }

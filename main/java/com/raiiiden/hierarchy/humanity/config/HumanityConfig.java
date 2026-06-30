@@ -21,6 +21,13 @@ public final class HumanityConfig {
   public static final ForgeConfigSpec.ConfigValue<List<? extends String>> MOB_KILL_HUMANITY_GAINS;
   public static final ForgeConfigSpec.DoubleValue BOUNTY_CLAIM_HUMANITY_GAIN;
   public static final ForgeConfigSpec.BooleanValue DECAY_ON_WIPE;
+  public static final ForgeConfigSpec.BooleanValue ENABLE_RANK_NOTIFICATIONS;
+  public static final ForgeConfigSpec.ConfigValue<String> RANK_CHANGE_MESSAGE;
+  public static final ForgeConfigSpec.IntValue HISTORY_MAX_ENTRIES;
+  public static final ForgeConfigSpec.IntValue HISTORY_DEFAULT_DISPLAY;
+  public static final ForgeConfigSpec.ConfigValue<String> HERO_LABEL;
+  public static final ForgeConfigSpec.ConfigValue<String> BANDIT_LABEL;
+  public static final ForgeConfigSpec.ConfigValue<String> NEUTRAL_LABEL;
 
   static {
     ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -44,6 +51,13 @@ public final class HumanityConfig {
             .defineList("mobKillHumanityGains", List.of("minecraft:zombie=0.5"), HumanityConfig::isMobKillGainEntry);
     BOUNTY_CLAIM_HUMANITY_GAIN = builder.defineInRange("bountyClaimHumanityGain", 10.0, 0.0, Double.MAX_VALUE);
     DECAY_ON_WIPE = builder.comment("Intended wipe behavior flag. Humanity is stored in world data, so deleting world data resets it.").define("decayOnWipe", true);
+    ENABLE_RANK_NOTIFICATIONS = builder.comment("Send an action-bar message when a player's displayed humanity rank changes.").define("enableRankNotifications", true);
+    RANK_CHANGE_MESSAGE = builder.comment("Rank-change action-bar message. {rank} is replaced with the new rank, e.g. 'Hero IV'.").define("rankChangeMessage", "You have become {rank}.");
+    HISTORY_MAX_ENTRIES = builder.comment("Maximum humanity history entries stored per player.").defineInRange("historyMaxEntries", 50, 1, 1000);
+    HISTORY_DEFAULT_DISPLAY = builder.comment("Default number of humanity history entries shown by /humanity history.").defineInRange("historyDefaultDisplay", 10, 1, 1000);
+    HERO_LABEL = builder.comment("Display label for positive-humanity ranks.").define("heroLabel", "Hero");
+    BANDIT_LABEL = builder.comment("Display label for negative-humanity ranks.").define("banditLabel", "Bandit");
+    NEUTRAL_LABEL = builder.comment("Display label for zero/neutral humanity.").define("neutralLabel", "Neutral");
     builder.pop();
     SPEC = builder.build();
   }

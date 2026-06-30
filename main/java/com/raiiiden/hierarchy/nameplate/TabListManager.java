@@ -4,6 +4,7 @@ import com.raiiiden.hierarchy.clan.data.ClanData;
 import com.raiiiden.hierarchy.clan.model.Clan;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -81,8 +82,20 @@ public final class TabListManager {
         }
 
         ChatFormatting color = tagColor(viewerClan, targetClan, data);
-        return Component.literal("[" + targetClan.getTag() + "] ").withStyle(color)
-                .append(Component.literal(username).withStyle(ChatFormatting.WHITE));
+        MutableComponent prefix = Component.literal("[" + targetClan.getTag() + "] ").withStyle(color);
+        if (NameplateConfig.SHOW_CLAN_NAME_IN_TABLIST.get() && !targetClan.getName().isBlank()) {
+            String name = truncate(targetClan.getName(), NameplateConfig.TABLIST_MAX_CLAN_NAME_LENGTH.get());
+            prefix.append(Component.literal(name + " ").withStyle(color));
+        }
+        return prefix.append(Component.literal(username).withStyle(ChatFormatting.WHITE));
+    }
+
+    /** Truncates a clan name to {@code max} characters, appending an ellipsis when shortened. */
+    public static String truncate(String value, int max) {
+        if (value == null) return "";
+        if (value.length() <= max) return value;
+        if (max <= 1) return value.substring(0, Math.max(0, max));
+        return value.substring(0, max - 1) + "…";
     }
 
     /**

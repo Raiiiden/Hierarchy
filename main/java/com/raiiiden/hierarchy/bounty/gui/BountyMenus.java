@@ -7,6 +7,8 @@ import com.raiiiden.hierarchy.bounty.events.BountyEvents;
 import com.raiiiden.hierarchy.bounty.model.Bounty;
 import com.raiiiden.hierarchy.clan.config.ClanCombatConfig;
 import com.raiiiden.hierarchy.clan.currency.CurrencyManager;
+import com.raiiiden.hierarchy.clan.data.ClanData;
+import com.raiiiden.hierarchy.humanity.HumanityRank;
 import com.raiiiden.hierarchy.humanity.config.HumanityConfig;
 import com.raiiiden.hierarchy.humanity.data.HumanityData;
 import com.raiiiden.hierarchy.nameplate.NameplateUtil;
@@ -199,8 +201,13 @@ public final class BountyMenus {
       return;
     }
     contract.shrink(1);
+    ClanData claimerClans = ClanData.get(player.server);
+    claimerClans.clanOf(player.getUUID()).ifPresent(clan -> {
+      clan.addBountyClaimed();
+      claimerClans.setDirty();
+    });
     if (HumanityConfig.ENABLE_HUMANITY.get()) {
-      HumanityData.get(player.server).add(player.getUUID(), HumanityConfig.BOUNTY_CLAIM_HUMANITY_GAIN.get());
+      HumanityData.get(player.server).add(player.getUUID(), HumanityConfig.BOUNTY_CLAIM_HUMANITY_GAIN.get(), "Bounty Redeemed");
       NameplateUtil.refresh(player);
     }
     SimpleContainer container = new SimpleContainer(27);
@@ -284,31 +291,7 @@ public final class BountyMenus {
   }
 
   private static String humanityRank(net.minecraft.server.MinecraftServer server, UUID playerId) {
-    if (!HumanityConfig.ENABLE_HUMANITY.get()) {
-      return "Neutral";
-    }
-    double min = HumanityConfig.MIN_HUMANITY.get();
-    double max = HumanityConfig.MAX_HUMANITY.get();
-    double value = HumanityData.get(server).humanity(playerId);
-    if (Math.abs(value) < 0.0001D) {
-      return "Neutral";
-    }
-    if (value <= 0.0D) {
-      int tier = Math.max(1, Math.min(5, (int)Math.ceil((0.0D - value) / Math.max(1.0D, (0.0D - min) / 5.0D))));
-      return "Bandit " + roman(tier);
-    }
-    int tier = Math.max(1, Math.min(5, (int)Math.ceil(value / Math.max(1.0D, max / 5.0D))));
-    return "Hero " + roman(tier);
-  }
-
-  private static String roman(int tier) {
-    return switch (tier) {
-      case 1 -> "I";
-      case 2 -> "II";
-      case 3 -> "III";
-      case 4 -> "IV";
-      default -> "V";
-    };
+    return HumanityRank.displayName(HumanityData.get(server).humanity(playerId));
   }
 
   private static String formatRemaining(long millis) {
@@ -462,6 +445,11 @@ public final class BountyMenus {
         clearStagedSlots();
         complete = true;
         data.place(player.server, targetId, targetName, player.getUUID(), staged, now);
+        ClanData placerClans = ClanData.get(player.server);
+        placerClans.clanOf(player.getUUID()).ifPresent(clan -> {
+          clan.addBountyPlaced();
+          placerClans.setDirty();
+        });
         target.sendSystemMessage(Component.literal("A bounty has been placed on you."));
         player.closeContainer();
       } else {

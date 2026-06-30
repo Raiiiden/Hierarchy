@@ -21,6 +21,14 @@ public class Clan {
   private final Set<UUID> allies = new LinkedHashSet<>();
   private final Set<UUID> enemies = new LinkedHashSet<>();
   private final LinkedList<BankTransaction> transactions = new LinkedList<>();
+  private long createdAt = System.currentTimeMillis();
+  private int kills;
+  private int deaths;
+  private int bountiesClaimed;
+  private int bountiesPlaced;
+  private int totalMembersJoined = 1; // counts the founder
+  private double totalHumanityGained;
+  private double totalHumanityLost;
   private boolean internalFriendlyFire = false;
   public boolean isInternalFriendlyFireEnabled() { return internalFriendlyFire; }
   public void setInternalFriendlyFire(boolean enabled) { this.internalFriendlyFire = enabled; }
@@ -104,6 +112,104 @@ public class Clan {
 
   public List<BankTransaction> getTransactions() {
     return transactions;
+  }
+
+  // --- Persistent statistics ---
+
+  public long getCreatedAt() {
+    return createdAt;
+  }
+
+  public void setCreatedAt(long createdAt) {
+    this.createdAt = createdAt;
+  }
+
+  public int getKills() {
+    return kills;
+  }
+
+  public void setKills(int kills) {
+    this.kills = kills;
+  }
+
+  public void addKill() {
+    this.kills++;
+  }
+
+  public int getDeaths() {
+    return deaths;
+  }
+
+  public void setDeaths(int deaths) {
+    this.deaths = deaths;
+  }
+
+  public void addDeath() {
+    this.deaths++;
+  }
+
+  public int getBountiesClaimed() {
+    return bountiesClaimed;
+  }
+
+  public void setBountiesClaimed(int bountiesClaimed) {
+    this.bountiesClaimed = bountiesClaimed;
+  }
+
+  public void addBountyClaimed() {
+    this.bountiesClaimed++;
+  }
+
+  public int getBountiesPlaced() {
+    return bountiesPlaced;
+  }
+
+  public void setBountiesPlaced(int bountiesPlaced) {
+    this.bountiesPlaced = bountiesPlaced;
+  }
+
+  public void addBountyPlaced() {
+    this.bountiesPlaced++;
+  }
+
+  public int getTotalMembersJoined() {
+    return totalMembersJoined;
+  }
+
+  public void setTotalMembersJoined(int totalMembersJoined) {
+    this.totalMembersJoined = totalMembersJoined;
+  }
+
+  public void addMemberJoined() {
+    this.totalMembersJoined++;
+  }
+
+  public double getTotalHumanityGained() {
+    return totalHumanityGained;
+  }
+
+  public void setTotalHumanityGained(double totalHumanityGained) {
+    this.totalHumanityGained = totalHumanityGained;
+  }
+
+  public void addHumanityGained(double amount) {
+    this.totalHumanityGained += amount;
+  }
+
+  public double getTotalHumanityLost() {
+    return totalHumanityLost;
+  }
+
+  public void setTotalHumanityLost(double totalHumanityLost) {
+    this.totalHumanityLost = totalHumanityLost;
+  }
+
+  public void addHumanityLost(double amount) {
+    this.totalHumanityLost += amount;
+  }
+
+  public double getKdr() {
+    return deaths == 0 ? kills : (double) kills / deaths;
   }
 
   public void addTransaction(BankTransaction transaction, int maxEntries) {
