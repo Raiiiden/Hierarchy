@@ -90,7 +90,7 @@ public final class TabListManager {
         return prefix.append(Component.literal(username).withStyle(ChatFormatting.WHITE));
     }
 
-    /** Truncates a clan name to {@code max} characters, appending an ellipsis when shortened. */
+    // Truncates a clan name to {@code max} characters, appending an ellipsis when shortened.
     public static String truncate(String value, int max) {
         if (value == null) return "";
         if (value.length() <= max) return value;
@@ -98,10 +98,8 @@ public final class TabListManager {
         return value.substring(0, max - 1) + "…";
     }
 
-    /**
-     * Shared color logic used by tab list, chat, and nameplates.
-     * GREEN = same clan, BLUE = allied, RED = everything else.
-     */
+    // Shared color logic used by tab list, chat, and nameplates.
+    // GREEN = same clan, BLUE = allied, RED = everything else.
     public static ChatFormatting tagColor(Clan viewerClan, Clan targetClan, ClanData data) {
         if (viewerClan == null) return ChatFormatting.RED;
         UUID vId = viewerClan.getId();

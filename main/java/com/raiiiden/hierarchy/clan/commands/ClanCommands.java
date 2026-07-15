@@ -45,7 +45,7 @@ public final class ClanCommands {
   private static final long DISBAND_CONFIRM_WINDOW_MILLIS = 30_000L;
   private static final Map<UUID, Long> pendingDisband = new ConcurrentHashMap<>();
 
-  /** Drops a player's armed disband confirmation (e.g. when they log out). */
+  // Drops a player's armed disband confirmation (e.g. when they log out).
   public static void clearPendingDisband(UUID playerId) {
     pendingDisband.remove(playerId);
   }
@@ -396,11 +396,9 @@ public final class ClanCommands {
     return ok(source, "Denied the invite from " + clan.getName() + ".");
   }
 
-  /**
-   * Resolves which invited clan a no-/single-argument accept or deny refers to.
-   * Sends a specific failure and returns null when there is nothing to act on or
-   * the choice is ambiguous.
-   */
+  // Resolves which invited clan a no-/single-argument accept or deny refers to.
+  // Sends a specific failure and returns null when there is nothing to act on or
+  // the choice is ambiguous.
   private static Clan resolveInvite(CommandSourceStack source, ClanData data, ServerPlayer player, String clanName, String verb) {
     List<ClanData.PendingClanInvite> invites = data.pendingInvites(player.getUUID());
     if (invites.isEmpty()) {

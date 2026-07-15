@@ -338,7 +338,7 @@ public class ClanData extends SavedData {
     setPlayerClanPvpDelay(playerId, clan.getId(), delayUntil);
   }
 
-  /** A pending clan invite paired with the absolute time (millis) it expires. */
+  // A pending clan invite paired with the absolute time (millis) it expires.
   public record PendingClanInvite(Clan clan, long expiresAtMillis) {}
 
   private static long inviteTtlMillis() {
@@ -351,10 +351,8 @@ public class ClanData extends SavedData {
     setDirty();
   }
 
-  /**
-   * Drops any of the player's invites that have expired (older than the configured
-   * expiry) or whose clan no longer exists. Returns the surviving invites, never null.
-   */
+  // Drops any of the player's invites that have expired (older than the configured
+  // expiry) or whose clan no longer exists. Returns the surviving invites, never null.
   private Map<UUID, Long> liveInvites(UUID playerId) {
     Map<UUID, Long> invites = pendingInvites.get(playerId);
     if (invites == null) {
@@ -394,7 +392,7 @@ public class ClanData extends SavedData {
     }
   }
 
-  /** All (non-expired) invites the player currently holds, with their expiry times. */
+  // All (non-expired) invites the player currently holds, with their expiry times.
   public List<PendingClanInvite> pendingInvites(UUID playerId) {
     long ttl = inviteTtlMillis();
     List<PendingClanInvite> result = new ArrayList<>();
@@ -407,7 +405,7 @@ public class ClanData extends SavedData {
     return result;
   }
 
-  /** Sweeps every player's invite list, removing expired/orphaned entries. */
+  // Sweeps every player's invite list, removing expired/orphaned entries.
   public void purgeExpiredInvites() {
     for (UUID playerId : new ArrayList<>(pendingInvites.keySet())) {
       liveInvites(playerId);
@@ -418,7 +416,7 @@ public class ClanData extends SavedData {
     return liveInvites(playerId).containsKey(clanId);
   }
 
-  /** Removes a single invite (e.g. on deny). */
+  // Removes a single invite (e.g. on deny).
   public void clearInvite(UUID playerId, UUID clanId) {
     Map<UUID, Long> invites = pendingInvites.get(playerId);
     if (invites != null && invites.remove(clanId) != null) {
@@ -429,7 +427,7 @@ public class ClanData extends SavedData {
     }
   }
 
-  /** Removes every invite for the player (e.g. once they join a clan). */
+  // Removes every invite for the player (e.g. once they join a clan).
   public void clearInvites(UUID playerId) {
     if (pendingInvites.remove(playerId) != null) {
       setDirty();
@@ -632,7 +630,7 @@ public class ClanData extends SavedData {
     return Optional.ofNullable(playerNameIndex.get(normalize(name)));
   }
 
-  /** Every player name the server has remembered (snapshot copy, safe to stream). */
+  // Every player name the server has remembered (snapshot copy, safe to stream).
   public Collection<String> knownPlayerNames() {
     return List.copyOf(playerNames.values());
   }

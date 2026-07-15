@@ -56,10 +56,8 @@ public final class NameplateUtil {
     }
   }
 
-  /**
-   * Pushes a per-viewer nameplate packet directly to {@code viewer} for {@code target}.
-   * Builds the SynchedEntityData payload manually — never mutates the entity.
-   */
+  // Pushes a per-viewer nameplate packet directly to {@code viewer} for {@code target}.
+  // Builds the SynchedEntityData payload manually — never mutates the entity.
   public static void refreshForViewer(ServerPlayer viewer, ServerPlayer target) {
     if (!NameplateConfig.ENABLE_CUSTOM_NAMEPLATES.get()) return;
 
@@ -81,10 +79,8 @@ public final class NameplateUtil {
     viewer.connection.send(new ClientboundSetEntityDataPacket(target.getId(), values));
   }
 
-  /**
-   * Full refresh: sets the canonical name on every player, then pushes
-   * per-viewer overrides for every viewer/target pair.
-   */
+  // Full refresh: sets the canonical name on every player, then pushes
+  // per-viewer overrides for every viewer/target pair.
   public static void refreshAll(MinecraftServer server) {
     List<ServerPlayer> players = server.getPlayerList().getPlayers();
     for (ServerPlayer target : players) {
@@ -104,10 +100,8 @@ public final class NameplateUtil {
     }
   }
 
-  /**
-   * On join: refresh canonical name for the new player, then push
-   * per-viewer overrides in both directions.
-   */
+  // On join: refresh canonical name for the new player, then push
+  // per-viewer overrides in both directions.
   public static void refreshOnJoin(ServerPlayer joined) {
     refresh(joined);
     for (ServerPlayer other : joined.server.getPlayerList().getPlayers()) {

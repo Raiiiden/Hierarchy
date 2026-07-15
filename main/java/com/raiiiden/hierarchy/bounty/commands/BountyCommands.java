@@ -78,7 +78,7 @@ public final class BountyCommands {
     return 1;
   }
 
-  // /bounty redeem — always allowed regardless of access mode. */
+  // /bounty redeem — always allowed regardless of access mode.
   private static int openRedeem(CommandSourceStack source, ServerPlayer player) {
     BountyMenus.openRedemption(player);
     return 1;
@@ -112,10 +112,8 @@ public final class BountyCommands {
   // Internal helpers
   // -------------------------------------------------------------------------
 
-  /**
-   * Returns true if the command source is allowed to access the bounty board via commands.
-   * In NPC_ONLY mode, all commands except /bounty redeem are blocked and this returns false.
-   */
+  // Returns true if the command source is allowed to access the bounty board via commands.
+  // In NPC_ONLY mode, all commands except /bounty redeem are blocked and this returns false.
   private static boolean accessAllowed(CommandSourceStack source) {
     if (BountyConfig.isNpcOnly()) {
       source.sendFailure(Component.literal(BountyConfig.NPC_ONLY_BLOCKED_MESSAGE.get()).withStyle(ChatFormatting.RED));

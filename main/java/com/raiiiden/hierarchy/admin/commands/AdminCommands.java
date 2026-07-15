@@ -200,14 +200,11 @@ public final class AdminCommands {
                 + " | contributors: " + bounty.contributions().size());
     }
 
-    /**
-     * Opens the bounty board GUI for the target player.
-     * This is the NPC/command-block integration point.
-     *
-     * Examples:
-     *   /hierarchyadmin openbounty SomePlayer
-     *   /hierarchy openbounty %player%   (EasyNPC, FTB Quests, command blocks)
-     */
+    // Opens the bounty board GUI for the target player.
+    // This is the NPC/command-block integration point.
+    // Examples:
+    // /hierarchyadmin openbounty SomePlayer
+    // /hierarchy openbounty %player%   (EasyNPC, FTB Quests, command blocks)
     private static int openBountyGui(CommandSourceStack source, ServerPlayer target) {
         if (!BountyConfig.ENABLE_BOUNTIES.get()) {
             return fail(source, "Bounties are disabled.");

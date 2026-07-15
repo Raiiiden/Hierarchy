@@ -11,10 +11,8 @@ import java.util.UUID;
 
 public class PartyEvents {
 
-    /**
-     * On login: sync party state to the newly joined player, and refresh the
-     * other party members' caches so they see the returning player.
-     */
+    // On login: sync party state to the newly joined player, and refresh the
+    // other party members' caches so they see the returning player.
     @SubscribeEvent
     public void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
@@ -32,10 +30,8 @@ public class PartyEvents {
         });
     }
 
-    /**
-     * On logout: remove the player from their party and notify remaining members.
-     * If the player was leader, leadership transfers automatically inside removeMember.
-     */
+    // On logout: remove the player from their party and notify remaining members.
+    // If the player was leader, leadership transfers automatically inside removeMember.
     @SubscribeEvent
     public void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;

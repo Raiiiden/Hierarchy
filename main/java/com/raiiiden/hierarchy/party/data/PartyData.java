@@ -131,17 +131,15 @@ public class PartyData extends SavedData {
         return livePendingInvite(playerId).map(invite -> parties.get(invite.partyId()));
     }
 
-    /** Absolute time (millis) the player's invite expires, or 0 if they have none. */
+    // Absolute time (millis) the player's invite expires, or 0 if they have none.
     public long pendingInviteExpiresAt(UUID playerId) {
         return livePendingInvite(playerId)
                 .map(invite -> invite.createdAt() + inviteTtlMillis())
                 .orElse(0L);
     }
 
-    /**
-     * Returns the player's pending invite if it is still valid, dropping it first
-     * when it has expired or its party no longer exists.
-     */
+    // Returns the player's pending invite if it is still valid, dropping it first
+    // when it has expired or its party no longer exists.
     private Optional<PendingInvite> livePendingInvite(UUID playerId) {
         PendingInvite invite = pendingInvites.get(playerId);
         if (invite == null) {
@@ -162,7 +160,7 @@ public class PartyData extends SavedData {
         return Optional.of(invite);
     }
 
-    /** Sweeps every player's invite, removing expired/orphaned entries. */
+    // Sweeps every player's invite, removing expired/orphaned entries.
     public void purgeExpiredInvites() {
         for (UUID playerId : new ArrayList<>(pendingInvites.keySet())) {
             livePendingInvite(playerId);
@@ -197,13 +195,10 @@ public class PartyData extends SavedData {
         setDirty();
     }
 
-    /**
-     * Removes a member from the party.
-     * <p>If the removed player was the leader, leadership is transferred to the next member.
-     * If the party becomes empty it is automatically disbanded.
-     *
-     * @return {@code true} if the party still exists after removal; {@code false} if it was disbanded.
-     */
+    // Removes a member from the party.
+    // <p>If the removed player was the leader, leadership is transferred to the next member.
+    // If the party becomes empty it is automatically disbanded.
+    // @return {@code true} if the party still exists after removal; {@code false} if it was disbanded.
     public boolean removeMember(Party party, UUID playerId) {
         party.getMembers().remove(playerId);
         playerParty.remove(playerId);
@@ -236,10 +231,8 @@ public class PartyData extends SavedData {
     // Client sync
     // -------------------------------------------------------------------------
 
-    /**
-     * Sends the party membership packet to a single player so their client can
-     * render party indicators correctly.
-     */
+    // Sends the party membership packet to a single player so their client can
+    // render party indicators correctly.
     public void syncToPlayer(ServerPlayer player) {
         if (server == null) return;
         Party party = partyOf(player.getUUID()).orElse(null);
@@ -259,7 +252,7 @@ public class PartyData extends SavedData {
                 net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT);
     }
 
-    /** Sends party membership packets to every currently online player. */
+    // Sends party membership packets to every currently online player.
     public void syncAll() {
         if (server == null) return;
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {

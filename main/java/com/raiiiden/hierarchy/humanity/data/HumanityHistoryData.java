@@ -14,7 +14,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.saveddata.SavedData;
 
-/** Per-player log of recent humanity changes (timestamp, reason, delta). */
+// Per-player log of recent humanity changes (timestamp, reason, delta).
 public class HumanityHistoryData extends SavedData {
   private static final String DATA_NAME = "hierarchy_humanity_history";
 
@@ -78,7 +78,7 @@ public class HumanityHistoryData extends SavedData {
     setDirty();
   }
 
-  /** Most recent entries first, up to {@code limit}. */
+  // Most recent entries first, up to {@code limit}.
   public List<Entry> recent(UUID playerId, int limit) {
     Deque<Entry> entries = history.get(playerId);
     if (entries == null || entries.isEmpty()) {

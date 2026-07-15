@@ -68,7 +68,7 @@ public final class PartyCommands {
     // Handlers
     // -------------------------------------------------------------------------
 
-    /** /party create — explicitly creates a party (also auto-created by /party invite). */
+    // /party create — explicitly creates a party (also auto-created by /party invite).
     private static int create(CommandSourceStack source, ServerPlayer player) {
         PartyData data = PartyData.get(source.getServer());
         if (data.partyOf(player.getUUID()).isPresent()) {
@@ -79,7 +79,7 @@ public final class PartyCommands {
         return ok(source, "Party created. Use /party invite <player> to add members.");
     }
 
-    /** /party disband — leader only; dissolves the whole party. */
+    // /party disband — leader only; dissolves the whole party.
     private static int disband(CommandSourceStack source, ServerPlayer player) {
         PartyData data = PartyData.get(source.getServer());
         Party party = data.partyOf(player.getUUID()).orElse(null);
@@ -93,11 +93,9 @@ public final class PartyCommands {
         return ok(source, "Party disbanded.");
     }
 
-    /**
-     * /party invite <player> — sends a party invite.
-     * Auto-creates a party for the inviter if they are not already in one.
-     * Only the party leader can send invites.
-     */
+    // /party invite <player> — sends a party invite.
+    // Auto-creates a party for the inviter if they are not already in one.
+    // Only the party leader can send invites.
     private static int invite(CommandSourceStack source, ServerPlayer player, String targetName) {
         MinecraftServer server = source.getServer();
         // Resolve the target by name — online first, then the server profile cache (offline).
@@ -146,7 +144,7 @@ public final class PartyCommands {
         return ok(source, "Invited " + targetDisplayName + " to your party. They will see it with /party invites when they log in.");
     }
 
-    /** /party accept — accepts a pending party invite. */
+    // /party accept — accepts a pending party invite.
     private static int accept(CommandSourceStack source, ServerPlayer player) {
         PartyData data = PartyData.get(source.getServer());
         if (data.partyOf(player.getUUID()).isPresent()) {
@@ -167,7 +165,7 @@ public final class PartyCommands {
         return ok(source, "Joined the party.");
     }
 
-    /** /party help — lists the available party subcommands. */
+    // /party help — lists the available party subcommands.
     private static int help(CommandSourceStack source) {
         source.sendSuccess(() -> Component.literal("Party commands:").withStyle(ChatFormatting.GOLD), false);
         String[][] entries = {
@@ -189,7 +187,7 @@ public final class PartyCommands {
         return 1;
     }
 
-    /** /party invites — shows the player's pending party invite, if any. */
+    // /party invites — shows the player's pending party invite, if any.
     private static int invites(CommandSourceStack source, ServerPlayer player) {
         PartyData data = PartyData.get(source.getServer());
         Party party = data.pendingInvite(player.getUUID()).orElse(null);
@@ -219,7 +217,7 @@ public final class PartyCommands {
         return minutes > 0 ? minutes + "m " + seconds + "s" : seconds + "s";
     }
 
-    /** /party decline — declines a pending party invite. */
+    // /party decline — declines a pending party invite.
     private static int decline(CommandSourceStack source, ServerPlayer player) {
         PartyData data = PartyData.get(source.getServer());
         if (!data.hasPendingInvite(player.getUUID())) {
@@ -229,7 +227,7 @@ public final class PartyCommands {
         return ok(source, "Declined the party invite.");
     }
 
-    /** /party leave — leaves the party; transfers leadership if the leader leaves. */
+    // /party leave — leaves the party; transfers leadership if the leader leaves.
     private static int leave(CommandSourceStack source, ServerPlayer player) {
         PartyData data = PartyData.get(source.getServer());
         Party party = data.partyOf(player.getUUID()).orElse(null);
@@ -251,7 +249,7 @@ public final class PartyCommands {
         return ok(source, "You left the party.");
     }
 
-    /** /party kick <player> — leader only; removes a member from the party. */
+    // /party kick <player> — leader only; removes a member from the party.
     private static int kick(CommandSourceStack source, ServerPlayer player, ServerPlayer target) {
         if (player.getUUID().equals(target.getUUID())) {
             return fail(source, "You cannot kick yourself. Use /party leave or /party disband.");
@@ -273,7 +271,7 @@ public final class PartyCommands {
         return ok(source, "Kicked " + target.getGameProfile().getName() + " from the party.");
     }
 
-    /** /party or /party list — shows the current party roster. */
+    // /party or /party list — shows the current party roster.
     private static int info(CommandSourceStack source, ServerPlayer player) {
         PartyData data = PartyData.get(source.getServer());
         Party party = data.partyOf(player.getUUID()).orElse(null);
@@ -289,7 +287,7 @@ public final class PartyCommands {
                 PartyConfig.MAX_PARTY_MEMBERS.get() + "): " + members);
     }
 
-    /** /party leader — shows who the current party leader is. */
+    // /party leader — shows who the current party leader is.
     private static int leader(CommandSourceStack source, ServerPlayer player) {
         PartyData data = PartyData.get(source.getServer());
         Party party = data.partyOf(player.getUUID()).orElse(null);
